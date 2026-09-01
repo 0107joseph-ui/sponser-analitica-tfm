@@ -1,0 +1,7 @@
+{
+  "mae_validacion": 0.14434518164281596,
+  "rmse_validacion": 0.6910495578877482,
+  "wmape_validacion": 1.4053379796853929,
+  "auc_clasificacion": 0.8925472018323795,
+  "tasa_venta_real_val": 0.061752380952380954
+}

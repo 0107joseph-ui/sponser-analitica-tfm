@@ -1,0 +1,45 @@
+{
+  "version": "v3",
+  "fecha_entrenamiento": "2026-08-25T13:39:21",
+  "dias_validacion": 150,
+  "lags": [
+    7,
+    14,
+    28
+  ],
+  "rolling_windows": [
+    7,
+    28,
+    90
+  ],
+  "model_features": [
+    "dia_mes",
+    "semana_anio",
+    "trimestre",
+    "es_fin_de_semana",
+    "es_evento",
+    "dias_hasta_proximo_evento",
+    "dias_desde_evento_anterior",
+    "lag_7",
+    "lag_14",
+    "lag_28",
+    "rolling_mean_7",
+    "rolling_mean_28",
+    "rolling_mean_90",
+    "rolling_std_7",
+    "historico_promedio_producto",
+    "codigo_producto_enc",
+    "dia_semana",
+    "tipo_evento_activo_enc"
+  ],
+  "hyperparams": {
+    "objective": "tweedie",
+    "tweedie_variance_power": 1.1,
+    "n_estimators": 1000,
+    "learning_rate": 0.05,
+    "num_leaves": 31,
+    "min_child_samples": 20,
+    "random_state": 42
+  },
+  "mejor_iteracion": 37
+}

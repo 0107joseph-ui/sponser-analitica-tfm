@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Node (Playwright, usado solo para pruebas del frontend, no hace falta para correr la app)
+node_modules/
+
+# Secretos y configuración local
+.env
+.env.*
+
+# Logs
+*.log
+
+# Base de datos local -- se crea sola al primer arranque del backend
+# (usuario administrador incluido, ver README). No se versiona para que cada
+# evaluador arranque con una base limpia, sin sesiones/usuarios de prueba de
+# quien preparó el repo.
+sponser_api/data/*.db
+sponser_api/data/*.sqlite*
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

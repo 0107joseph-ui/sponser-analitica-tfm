@@ -1,0 +1,66 @@
+{
+  "version": "v8",
+  "tipo_modelo": "hurdle",
+  "fecha_entrenamiento": "2026-08-27T12:48:43",
+  "dias_validacion": 150,
+  "lags": [
+    1,
+    2,
+    3,
+    7,
+    14,
+    28
+  ],
+  "rolling_windows": [
+    7,
+    28,
+    90
+  ],
+  "model_features": [
+    "dia_mes",
+    "semana_anio",
+    "trimestre",
+    "es_fin_de_semana",
+    "es_evento",
+    "dias_hasta_proximo_evento",
+    "dias_desde_evento_anterior",
+    "lag_1",
+    "lag_2",
+    "lag_3",
+    "lag_7",
+    "lag_14",
+    "lag_28",
+    "rolling_mean_7",
+    "rolling_mean_28",
+    "rolling_mean_90",
+    "rolling_std_7",
+    "historico_promedio_producto",
+    "codigo_producto_enc",
+    "dia_semana",
+    "tipo_evento_activo_enc"
+  ],
+  "hyperparams": {
+    "clasificacion": {
+      "objective": "binary",
+      "n_estimators": 1500,
+      "learning_rate": 0.03,
+      "num_leaves": 15,
+      "min_child_samples": 50,
+      "reg_lambda": 1.0,
+      "random_state": 42
+    },
+    "regresion": {
+      "objective": "poisson",
+      "n_estimators": 1500,
+      "learning_rate": 0.03,
+      "num_leaves": 15,
+      "min_child_samples": 50,
+      "reg_lambda": 1.0,
+      "random_state": 42
+    }
+  },
+  "model_files": {
+    "clasificacion": "model_clasificacion.txt",
+    "regresion": "model_regresion.txt"
+  }
+}
