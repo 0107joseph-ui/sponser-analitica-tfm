@@ -392,9 +392,8 @@ componente:
   del TFM (documento formal, orientado a negocio, con el análisis
   descriptivo, la metodología de modelado y las conclusiones). Abrir en el
   navegador e imprimir a PDF para la entrega. **Pendiente de completar**:
-  nombre del alumno y fecha de entrega (marcados en el documento), y la
-  sección de bibliografía debe ampliarse con las referencias específicas
-  del máster.
+  la sección de bibliografía debe ampliarse con las referencias
+  específicas del máster.
 
 ## Licencia
 
