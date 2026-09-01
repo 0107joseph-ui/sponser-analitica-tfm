@@ -130,6 +130,8 @@ sponser-analitica-tfm/
 │   ├── pipeline_datos.md
 │   └── modelado.md
 │
+├── Dockerfile                     # Imagen del backend + sponser_etl
+├── docker-compose.yml             # Backend + frontend con un solo comando
 ├── LICENSE.md
 └── README.md
 ```
@@ -147,9 +149,35 @@ sponser-analitica-tfm/
 
 ## Instalación y arranque
 
+Dos formas de correrlo, a elección: con Docker (un solo comando, no
+requiere tener Python instalado) o con un entorno virtual manual.
+
+### Opción A: Docker
+
+Requisito: Docker y Docker Compose instalados.
+
+```bash
+docker compose up --build
+```
+
+Levanta el backend (con `sponser_etl` ya incluido para el pipeline) en
+`http://localhost:8000` y el frontend en `http://localhost:5500` — abrir
+`http://localhost:5500/Sponser%20Analitica%20v2%20Ilustrada.dc.html`. La
+base de datos persiste en un volumen con nombre entre reinicios
+(`docker compose down -v` para empezar de cero). Variables de entorno como
+`SPONSER_API_SECRET_KEY` se pueden fijar en la shell antes de levantar los
+contenedores; ver el resto de esta sección para qué hace cada una.
+
+> No pude probar esta ruta con un `docker build`/`docker compose up` real
+> en el entorno donde armé este repositorio (no tenía Docker disponible) --
+> revisado con cuidado línea por línea, pero si algo falla al construir la
+> imagen, es el primer lugar donde mirar.
+
+### Opción B: entorno virtual manual
+
 Requisitos: **Python 3.11+** (se desarrolló y probó con 3.11.9).
 
-### 1. Entorno virtual e instalación de dependencias
+#### 1. Entorno virtual e instalación de dependencias
 
 ```bash
 # Backend
@@ -163,7 +191,7 @@ cd ..\sponser_etl
 pip install -r requirements.txt
 ```
 
-### 2. Arrancar el backend
+#### 2. Arrancar el backend
 
 ```bash
 cd sponser_api
@@ -178,7 +206,7 @@ vienen con los datos y el modelo entrenado sobre las ventas reales de Sponser.
 Si se quiere reproducir esa salida desde los archivos crudos, ver
 [Reproducir el pipeline desde cero](#reproducir-el-pipeline-desde-cero).
 
-### 3. Arrancar el frontend
+#### 3. Arrancar el frontend
 
 En otra terminal:
 
@@ -351,6 +379,12 @@ python replenishment/run.py        # recomendación de compra
 
 Cada paso imprime un resumen en la terminal (filas procesadas, rango de
 fechas, advertencias de archivos con formato inesperado, etc.).
+
+Con Docker, estos mismos comandos corren dentro del contenedor del backend:
+
+```bash
+docker compose exec backend bash -c "cd ../sponser_etl && python pipeline.py"
+```
 
 ## Limitaciones conocidas y trabajo futuro
 

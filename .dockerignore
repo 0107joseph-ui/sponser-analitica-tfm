@@ -1,0 +1,16 @@
+.git
+.gitignore
+.gitattributes
+README.md
+LICENSE.md
+docs
+
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/venv
+**/.venv
+**/node_modules
+
+sponser_api/data/*.db
+sponser_api/data/*.sqlite*

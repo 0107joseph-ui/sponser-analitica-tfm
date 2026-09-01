@@ -1,0 +1,45 @@
+# Levanta el sistema completo con un solo comando: docker compose up --build
+#
+# backend: FastAPI + sponser_etl (construido desde el Dockerfile de este repo).
+# frontend: los mismos archivos estáticos que el README sirve con
+#   "python -m http.server 5500" en desarrollo local -- acá se montan
+#   directamente desde el checkout (sin build) sobre una imagen base de Python.
+#
+# Correr siempre desde la raíz del repo (donde está este archivo).
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persiste la base de datos (usuarios, metas, bitácora) entre reinicios
+      # del contenedor. Quitar este volumen (o "docker compose down -v") si
+      # se prefiere que cada arranque cree un usuario admin desde cero.
+      - sponser_api_data:/app/sponser_api/data
+    environment:
+      # Sin "=valor": si no están seteadas en la shell donde corrés
+      # "docker compose up", Compose simplemente no las pasa al contenedor
+      # (no las fija en "", que pisaría el default seguro de config.py y
+      # apagaría el warning de "estás usando la clave/clave de ejemplo").
+      # Ver README, "Manejo de entorno y seguridad", para qué hace cada una.
+      - SPONSER_API_SECRET_KEY
+      - SPONSER_API_ADMIN_EMAIL
+      - SPONSER_API_ADMIN_PASSWORD
+    restart: unless-stopped
+
+  frontend:
+    image: python:3.11-slim
+    working_dir: /site
+    volumes:
+      - ./sponser_api/frontend_src:/site:ro
+    ports:
+      - "5500:5500"
+    command: ["python", "-m", "http.server", "5500"]
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  sponser_api_data:
