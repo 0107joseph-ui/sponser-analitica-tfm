@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Memoria TFM — Sponser Analítica</title>
+<style>
+  @page { size: letter; margin: 2.2cm 2cm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Verdana, Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.5;
+    color: #222;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2cm 1.5cm;
+    background: #fff;
+  }
+  h1, h2, h3 { color: #a11d22; font-family: Arial, sans-serif; }
+  h1 { font-size: 20pt; border-bottom: 2px solid #a11d22; padding-bottom: 6px; }
+  h2 { font-size: 14pt; margin-top: 1.6em; page-break-after: avoid; }
+  h3 { font-size: 11.5pt; margin-top: 1.2em; page-break-after: avoid; }
+  p, li { text-align: justify; }
+  .cover {
+    min-height: 24cm; display: flex; flex-direction: column; justify-content: center;
+    text-align: center; page-break-after: always;
+  }
+  .cover h1 { border: none; font-size: 26pt; margin-bottom: 0.2em; }
+  .cover .subtitulo { font-size: 13pt; color: #555; margin-bottom: 2.5em; }
+  .cover table { margin: 0 auto; text-align: left; font-size: 11pt; }
+  .cover table td { padding: 3px 10px; }
+  .cover table td:first-child { font-weight: bold; color: #555; }
+  .completar { background: #fff3cd; padding: 0 4px; border-radius: 2px; }
+  .indice { page-break-after: always; }
+  .indice ol { line-height: 2; }
+  .indice a { color: #222; text-decoration: none; }
+  figure { margin: 1.2em 0; text-align: center; page-break-inside: avoid; }
+  figure img { max-width: 100%; border: 1px solid #eee; }
+  figcaption { font-size: 9pt; color: #666; margin-top: 4px; }
+  table.datos { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 9.5pt; }
+  table.datos th, table.datos td { border: 1px solid #ddd; padding: 5px 8px; text-align: left; }
+  table.datos th { background: #f7ecec; color: #a11d22; }
+  table.datos td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .caja {
+    background: #f7ecec; border-left: 4px solid #a11d22; padding: 0.8em 1em;
+    margin: 1em 0; font-size: 10pt;
+  }
+  .anexo-ref { font-style: italic; color: #666; font-size: 9.5pt; }
+  .seccion { page-break-before: always; }
+  code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; font-size: 9.5pt; }
+  .bib { font-size: 9.5pt; }
+  .bib li { margin-bottom: 0.5em; }
+  @media print {
+    body { padding: 0; }
+    a { color: inherit; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Sponser Analítica</h1>
+  <div class="subtitulo">Pipeline de datos, pronóstico de demanda y reabastecimiento<br>productivizados para un distribuidor de nutrición deportiva</div>
+  <table>
+    <tr><td>Trabajo Fin de Máster</td><td>Máster en Data Science, Big Data &amp; Business Analytics</td></tr>
+    <tr><td>Modalidad</td><td>Semipresencial</td></tr>
+    <tr><td>Autor</td><td class="completar">[Nombre y dos apellidos del alumno]</td></tr>
+    <tr><td>Tutores</td><td>Carlos Ortega, Santiago Mota</td></tr>
+    <tr><td>Fecha</td><td class="completar">[Fecha de entrega]</td></tr>
+    <tr><td>Repositorio</td><td>https://github.com/0107joseph-ui/sponser-analitica-tfm (privado — tutores con acceso)</td></tr>
+  </table>
+</div>
+
+<div class="indice">
+  <h2>Índice</h2>
+  <ol>
+    <li>Resumen ejecutivo</li>
+    <li>Contexto y objetivos de negocio</li>
+    <li>Fuente de datos y gobernanza</li>
+    <li>Arquitectura de la solución</li>
+    <li>Pipeline de datos (ETL)</li>
+    <li>Análisis exploratorio de datos</li>
+    <li>Modelado predictivo de demanda</li>
+    <li>Reabastecimiento: de la predicción a la decisión de compra</li>
+    <li>Productivización: la aplicación web</li>
+    <li>Discusión: interpretabilidad y limitaciones</li>
+    <li>Conclusiones y trabajo futuro</li>
+    <li>Bibliografía y referencias</li>
+  </ol>
+  <p class="anexo-ref">Anexo (no cuenta para el límite de extensión): código fuente completo, y documentación técnica ampliada en <code>docs/arquitectura.md</code>, <code>docs/pipeline_datos.md</code> y <code>docs/modelado.md</code> del repositorio.</p>
+</div>
+
+<h2>1. Resumen ejecutivo</h2>
+<p>
+Sponser Costa Rica es un distribuidor de nutrición deportiva con un catálogo de
+cerca de 170 SKUs y una cartera de 194 clientes activos. La operación
+dependía de reportes planos exportados a mano, sin un pronóstico de demanda
+que anticipara estacionalidad o eventos, y sin visibilidad sistemática del
+riesgo de que el inventario existente venza antes de poder venderse.
+</p>
+<p>
+Este trabajo desarrolla, sobre datos reales de la empresa (ventas 2023-2026,
+inventario por lote con fecha de vencimiento, patrocinios), una solución de
+extremo a extremo: un pipeline de datos que limpia y agrega la información
+comercial, un modelo de pronóstico de demanda diaria por producto (LightGBM,
+arquitectura de dos etapas), una simulación de reabastecimiento consciente
+de vencimientos (FIFO), y una aplicación web donde el equipo comercial carga
+los datos actualizados, corre el modelo y analiza los resultados —
+cumpliendo el criterio de productivización de un modelo predictivo: recibe
+datos nuevos y devuelve una recomendación de compra accionable.
+</p>
+<div class="caja">
+<strong>Cifras clave:</strong> 10.929 líneas de venta reales (abr. 2023 – may.
+2026) · 194 clientes · ~170 SKUs · modelo con AUC de clasificación 0.90 y
+93.4% de precisión agregada de volumen contra el backtest · 23% de los
+clientes concentran el 80% de la facturación.
+</div>
+
+<h2 class="seccion">2. Contexto y objetivos de negocio</h2>
+<p>
+La operación comercial de Sponser identificó tres problemas concretos que
+motivan este trabajo:
+</p>
+<ul>
+<li><strong>Falta de visibilidad consolidada</strong>: ventas, clientes y
+patrocinios se revisaban en reportes planos exportados del sistema de
+facturación, sin agregación ni tendencia visible.</li>
+<li><strong>Reposición de inventario a criterio</strong>, sin un pronóstico
+de demanda que distinguiera estacionalidad, eventos deportivos o
+inactividad de producto del ruido normal de la venta diaria.</li>
+<li><strong>Riesgo de vencimiento</strong>: con inventario organizado por
+lotes con fecha de caducidad, no había forma sistemática de saber qué
+unidades, al ritmo de venta real, no se iban a consumir antes de vencer.</li>
+</ul>
+<p>
+El objetivo del proyecto es doble: (a) demostrar un desarrollo analítico
+completo — descriptivo, predictivo y de decisión — sobre un problema de
+negocio real, y (b) entregar una herramienta que el equipo comercial de
+Sponser use de forma continua, no un análisis de una sola vez.
+</p>
+
+<h2 class="seccion">3. Fuente de datos y gobernanza</h2>
+<p>
+Los datos utilizados son reales y propiedad de Sponser Costa Rica, incluidos
+en este trabajo con autorización de la empresa para fines exclusivamente
+académicos (ver <code>LICENSE.md</code> del repositorio). No es un dataset
+público ni sintético: son los reportes de venta e inventario que la empresa
+exporta de su propio sistema de facturación.
+</p>
+<table class="datos">
+<tr><th>Fuente</th><th>Contenido</th><th>Volumen</th></tr>
+<tr><td>COM / Control Sponser (.xls)</td><td>Detalle de facturación por línea</td><td class="num">10.929 filas · 3.071 facturas</td></tr>
+<tr><td>Inventario (.xlsx)</td><td>Lotes con fecha de vencimiento</td><td class="num">112 lotes activos</td></tr>
+<tr><td>Rango temporal</td><td>—</td><td class="num">29 abr. 2023 – 28 may. 2026</td></tr>
+<tr><td>Clientes</td><td>—</td><td class="num">194</td></tr>
+<tr><td>Productos (SKUs)</td><td>—</td><td class="num">~170</td></tr>
+</table>
+<p class="anexo-ref">Diccionario de datos completo (columnas de cada tabla
+procesada) en el README del repositorio, sección "Diccionario de datos".</p>
+
+<h2 class="seccion">4. Arquitectura de la solución</h2>
+<p>
+La solución se divide en dos componentes independientes que se comunican
+solo a través de archivos y ejecución de subprocesos, nunca por importación
+de código — así el pipeline de datos y el backend pueden evolucionar sin
+arriesgarse mutuamente:
+</p>
+<ul>
+<li><strong>Pipeline de datos y modelado</strong> (Python + pandas +
+LightGBM): extracción, transformación, entrenamiento del modelo,
+generación del pronóstico y cálculo de la recomendación de compra.</li>
+<li><strong>Backend + dashboard</strong> (FastAPI + SQLAlchemy + frontend
+web): sirve los resultados del pipeline vía API, gestiona usuarios/roles, y
+permite disparar el pipeline desde la interfaz cuando llegan datos nuevos.</li>
+</ul>
+<p class="anexo-ref">Diagrama de arquitectura y justificación detallada de
+cada decisión de diseño (capas de caché, seguridad, aislamiento entre
+componentes) en <code>docs/arquitectura.md</code>.</p>
+
+<h2 class="seccion">5. Pipeline de datos (ETL)</h2>
+<p>
+El pipeline resuelve tres retos particulares de los datos crudos de
+Sponser, antes de que cualquier análisis o modelo pueda usarlos:
+</p>
+<h3>5.1 Extracción</h3>
+<p>
+Los reportes de venta no son archivos Excel binarios: son una tabla HTML
+(GridView de ASP.NET) exportada con extensión <code>.xls</code>. Se
+parsean con la librería estándar de Python (<code>html.parser</code>),
+identificando cada archivo por su nombre para etiquetar la fuente
+(COM/Control) y el año.
+</p>
+<h3>5.2 Transformación</h3>
+<p>
+Se normaliza la moneda (un 0.04% de las filas viene en colones y se
+convierte a USD), se separan las salidas de inventario por patrocinio
+deportivo del resto de la venta comercial (no son venta orgánica y
+sesgarían el modelo si se incluyeran), y se calcula la venta neta restando
+el IVA del monto bruto facturado — verificado empíricamente contra ambas
+fuentes de reporte (99.9% de coincidencia con la identidad contable
+esperada).
+</p>
+<h3>5.3 Carga</h3>
+<p>
+Las tablas resultantes (ventas diarias por producto, RFM de clientes,
+inventario por lote, patrocinios) se escriben como CSV, consumibles tanto
+por el modelo como por el backend sin conocer la lógica previa de
+extracción.
+</p>
+<p class="anexo-ref">Detalle completo de cada transformación, con la lógica
+exacta de separación de patrocinios y conversión de moneda, en
+<code>docs/pipeline_datos.md</code>.</p>
+
+<h2 class="seccion">6. Análisis exploratorio de datos</h2>
+<p>
+La facturación mensual muestra una tendencia de crecimiento sostenida sobre
+los tres años de historia disponibles, con una estacionalidad marcada
+(picos y valles que se repiten en el mismo período del año), consistente
+con una demanda ligada a temporadas deportivas y patrocinios de eventos:
+</p>
+<figure>
+  <img src="figuras/01_ventas_mensuales.png" alt="Facturación mensual">
+  <figcaption>Figura 1 — Facturación mensual de ventas orgánicas (excluye patrocinios), abril 2023 – mayo 2026.</figcaption>
+</figure>
+
+<p>
+La facturación está fuertemente concentrada en un núcleo de productos: 15
+SKUs explican una porción desproporcionada de la venta total, lo que
+justifica priorizar el esfuerzo de pronóstico y reabastecimiento en ese
+subconjunto sin descuidar el resto del catálogo:
+</p>
+<figure>
+  <img src="figuras/02_top_productos.png" alt="Top productos">
+  <figcaption>Figura 2 — Los 15 SKUs de mayor facturación acumulada.</figcaption>
+</figure>
+
+<p>
+Lo mismo ocurre del lado de clientes: el <strong>23% de la cartera
+concentra el 80% de la facturación</strong> — un patrón de Pareto clásico
+que tiene implicaciones directas de negocio (priorización de cuentas clave,
+gestión de riesgo de concentración):
+</p>
+<figure>
+  <img src="figuras/03_pareto_clientes.png" alt="Concentración de clientes">
+  <figcaption>Figura 3 — Curva de concentración de clientes por facturación acumulada.</figcaption>
+</figure>
+
+<p>
+Del lado de inventario, la distribución de lotes por meses restantes hasta
+vencer muestra que una porción del stock actual tiene una ventana de venta
+relativamente corta — la motivación directa del componente de
+reabastecimiento consciente de vencimientos (sección 8):
+</p>
+<figure>
+  <img src="figuras/04_inventario_vencimiento.png" alt="Inventario por vencimiento">
+  <figcaption>Figura 4 — Distribución de lotes de inventario según meses restantes hasta la fecha de vencimiento.</figcaption>
+</figure>
+
+<h2 class="seccion">7. Modelado predictivo de demanda</h2>
+<h3>7.1 Por qué un modelo de dos etapas ("hurdle")</h3>
+<p>
+El panel producto × día es mayormente ceros: en el conjunto de validación
+de la versión vigente del modelo, solo el 5.7% de las combinaciones
+producto-día tuvieron venta real. Un único regresor entrenado directamente
+sobre esto tiende a "aprender a predecir cero" y subestimar los días en que
+sí hay demanda. Las primeras versiones del proyecto (v1-v4) usaron un solo
+LightGBM con objetivo Tweedie (pensado para variables con exceso de ceros);
+a partir de v5 se cambió a una arquitectura de dos etapas:
+</p>
+<ol>
+<li><strong>Clasificación</strong> — ¿hay venta ese producto ese día?
+(LightGBM binario, AUC = 0.90 en la versión vigente).</li>
+<li><strong>Regresión</strong> — dado que sí hay venta, ¿cuánto se vende?
+(LightGBM con objetivo Poisson, entrenado solo sobre filas con venta
+positiva).</li>
+</ol>
+<p>
+La predicción final combina ambas: <code>E[demanda] = P(venta) ×
+E[cantidad | venta]</code>. Cada etapa aprende una sola pregunta en vez de
+las dos a la vez.
+</p>
+<h3>7.2 Variables (features)</h3>
+<p>
+Calendario (día del mes, semana del año, trimestre, fin de semana),
+eventos (días hasta/desde el evento más cercano), rezagos (1, 2, 3, 7, 14 y
+28 días), medias y desviación móvil (7/28/90 días), e histórico promedio
+del producto — 21 variables en total.
+</p>
+<h3>7.3 Validación y resultados</h3>
+<p>
+Split temporal (los últimos 150 días como validación, nunca aleatorio, para
+no filtrar información del futuro), y un backtest recursivo (el mismo
+procedimiento que usaría el modelo en producción) contra ventas ya
+ocurridas pero excluidas del entrenamiento:
+</p>
+<figure>
+  <img src="figuras/05_backtest_real_vs_pronosticado.png" alt="Backtest real vs pronosticado">
+  <figcaption>Figura 5 — Backtest de la versión vigente (v8): unidades reales vs. pronosticadas, agregado mensual de todos los SKUs.</figcaption>
+</figure>
+<table class="datos">
+<tr><th>Métrica</th><th>Valor (v8)</th><th>Lectura de negocio</th></tr>
+<tr><td>AUC de clasificación</td><td class="num">0.90</td><td>Distingue bien los días con venta de los días sin venta</td></tr>
+<tr><td>% del volumen total real (backtest)</td><td class="num">93.4%</td><td>El volumen agregado pronosticado a 150 días se acerca mucho al real</td></tr>
+<tr><td>% de combinaciones SKU-mes dentro de ±20%</td><td class="num">24.2%</td><td>Precisión a nivel granular, más exigente que el agregado</td></tr>
+</table>
+<p>
+Se entrenaron y compararon 8 versiones del modelo durante el desarrollo,
+documentadas con sus métricas completas en el repositorio — la versión v8
+mejora notablemente el error absoluto medio sobre las versiones anteriores
+sin sacrificar la precisión agregada de volumen.
+</p>
+<p class="anexo-ref">Tabla comparativa completa de las 8 versiones,
+metodología de features y discusión de por qué el WMAPE a nivel de fila es
+alto pese a que las métricas agregadas son buenas (naturaleza intermitente
+de la demanda), en <code>docs/modelado.md</code>.</p>
+
+<h2 class="seccion">8. Reabastecimiento: de la predicción a la decisión de compra</h2>
+<p>
+El pronóstico por sí solo no genera una decisión de compra: hace falta
+cruzarlo con el inventario existente (por lote, con su fecha de
+vencimiento), el lead time de fábrica, el stock de seguridad, y las
+restricciones reales de compra (cantidad mínima de pedido y múltiplo de
+empaque).
+</p>
+<p>
+El componente de reabastecimiento simula el consumo del inventario
+existente en orden estricto de vencimiento (FIFO: lo que vence primero se
+consume primero) contra la <strong>curva día a día</strong> del pronóstico
+del modelo — no un promedio aplanado, para no perder la estacionalidad que
+el modelo sí calculó — y solo sugiere pedir la demanda que el inventario
+actual, más lo ya negociado con el proveedor, no alcanza a cubrir dentro
+del horizonte de compra.
+</p>
+<div class="caja">
+Con los datos actuales, el modelo identifica ~495 unidades en riesgo real
+de vencer antes de consumirse al ritmo de venta pronosticado, y recomienda
+pedir 3.097 unidades adicionales entre los 91 SKUs (de 167) donde el
+inventario y lo ya comprometido no cubren la demanda esperada.
+</div>
+<p class="anexo-ref">Detalle del algoritmo FIFO, la construcción del
+horizonte de simulación y la asignación de ofertas de proveedor, en
+<code>docs/arquitectura.md</code> y el código en <code>sponser_etl/replenishment/</code>.</p>
+
+<h2 class="seccion">9. Productivización: la aplicación web</h2>
+<p>
+Más allá del análisis, el proyecto se entrega como una aplicación en
+producción que el equipo comercial usa de forma continua — cumpliendo el
+criterio de que el modelo "reciba datos nuevos y devuelva una predicción"
+en un contexto real de negocio, no solo como notebook de análisis:
+</p>
+<ul>
+<li><strong>Carga de datos</strong>: el equipo comercial sube los archivos
+de ventas/inventario actualizados directamente desde el navegador; el
+sistema valida el formato y dispara el pipeline completo (ETL + modelo +
+reabastecimiento) con un clic.</li>
+<li><strong>Dashboard interactivo</strong>: KPIs de facturación vs. meta,
+catálogo con tendencia y riesgo de vencimiento, análisis comercial
+(ranking de clientes, Pareto, líneas comerciales), proyección por SKU, y
+pedido a fábrica con la recomendación ya calculada.</li>
+<li><strong>Seguridad y control de acceso</strong>: autenticación en dos
+pasos (contraseña + código de un solo uso por correo), y roles
+diferenciados (administrador vs. solo lectura) aplicados tanto en la
+interfaz como en cada endpoint del backend.</li>
+<li><strong>Gestión de colaboradores</strong>: un administrador puede
+invitar a otros usuarios del equipo sin intervención técnica.</li>
+</ul>
+<p class="anexo-ref">Capturas de pantalla, credenciales de acceso e
+instrucciones completas de instalación local en el README del repositorio.</p>
+
+<h2 class="seccion">10. Discusión: interpretabilidad y limitaciones</h2>
+<h3>10.1 Interpretabilidad</h3>
+<p>
+Ambas etapas del modelo se auditaron por importancia de variable (ganancia
+de información acumulada en LightGBM). En la etapa de clasificación, el
+código de producto, la media móvil a 28 días y si el día es fin de semana
+son las variables más influyentes; en la de regresión, el código de
+producto y el rezago de 1 día dominan — resultados consistentes con la
+intuición de negocio (cada producto tiene su propio nivel base de demanda,
+y la venta reciente es el mejor predictor de la venta inmediata siguiente).
+</p>
+<h3>10.2 Limitaciones</h3>
+<ul>
+<li>El error a nivel de fila individual (SKU-día) es alto por la naturaleza
+intermitente de la demanda (94% de días sin venta); las métricas agregadas
+(volumen total, SKU-mes) son las relevantes para la decisión de compra, no
+el pronóstico diario aislado.</li>
+<li>SKUs nuevos o con poca historia dependen más del promedio general del
+catálogo que de un patrón propio aprendido.</li>
+<li>El calendario de eventos deportivos que alimenta al modelo se mantiene
+manualmente y hoy tiene cobertura limitada — su exactitud acota
+directamente cuánto puede aprender el modelo sobre el efecto de eventos en
+la demanda.</li>
+<li>La base de datos operativa (SQLite) es apropiada para el volumen actual
+de usuarios concurrentes; un despliegue con más usuarios simultáneos se
+beneficiaría de migrar a PostgreSQL.</li>
+</ul>
+
+<h2 class="seccion">11. Conclusiones y trabajo futuro</h2>
+<p>
+El proyecto demuestra que es posible pasar de reportes planos sin
+pronóstico a una herramienta productiva de decisión de compra, construida
+enteramente sobre datos reales de la empresa: un pipeline reproducible, un
+modelo de pronóstico con precisión agregada de negocio del 93.4% y una
+aplicación que el equipo comercial ya puede operar sin intervención
+técnica.
+</p>
+<p>
+El mayor impacto de negocio identificado no es el pronóstico en sí, sino la
+combinación de pronóstico + inventario por lote + vencimiento: es lo que
+convierte una predicción estadística en una recomendación de compra
+accionable y auditable, con el riesgo de pérdida por vencimiento hecho
+explícito en vez de descubrirse después de que ocurre.
+</p>
+<p><strong>Líneas de trabajo futuro:</strong></p>
+<ul>
+<li>Poblar el calendario de eventos con datos reales (hoy es en su mayoría
+un ejemplo) para capturar mejor los picos de demanda ligados a carreras y
+promociones.</li>
+<li>Incorporar ofertas de proveedor reales al componente de
+reabastecimiento (`ofertas_proveedor.csv` está vacío en el estado actual).</li>
+<li>Migrar la persistencia a PostgreSQL y el despliegue a un entorno cloud
+gestionado (Cloud Run + Cloud Storage), diseño ya evaluado pero pendiente
+de la infraestructura del cliente.</li>
+<li>Explorar técnicas de interpretabilidad más profundas (valores SHAP) más
+allá de la importancia de variable por ganancia.</li>
+</ul>
+
+<h2 class="seccion">12. Bibliografía y referencias</h2>
+<ul class="bib">
+<li>Ke, G., Meng, Q., Finley, T., Wang, T., Chen, W., Ma, W., Ye, Q., &amp;
+Liu, T.-Y. (2017). <em>LightGBM: A Highly Efficient Gradient Boosting
+Decision Tree</em>. Advances in Neural Information Processing Systems
+(NeurIPS) 30.</li>
+<li>Pedregosa, F., et al. (2011). <em>Scikit-learn: Machine Learning in
+Python</em>. Journal of Machine Learning Research, 12, 2825-2830.</li>
+<li>McKinney, W. (2010). <em>Data Structures for Statistical Computing in
+Python</em>. Proceedings of the 9th Python in Science Conference.</li>
+<li>Croston, J. D. (1972). <em>Forecasting and Stock Control for
+Intermittent Demands</em>. Operational Research Quarterly, 23(3), 289-303.
+— referencia clásica sobre pronóstico de demanda intermitente, el mismo
+problema que motiva la arquitectura de dos etapas usada en este trabajo.</li>
+<li>Silver, E. A., Pyke, D. F., &amp; Thomas, D. J. (2016). <em>Inventory
+and Production Management in Supply Chains</em> (4th ed.). CRC Press. —
+referencia general sobre lead time, stock de seguridad y políticas de
+reabastecimiento.</li>
+<li>Ramírez-Vélez, S. (Ed.). FastAPI documentation. <a href="https://fastapi.tiangolo.com/">https://fastapi.tiangolo.com/</a></li>
+</ul>
+<p class="anexo-ref">Nota: completar/ampliar esta bibliografía con las
+referencias específicas de los módulos del máster que respalden las
+decisiones metodológicas (arquitectura hurdle, validación temporal,
+gradient boosting) según el criterio del alumno.</p>
+
+</body>
+</html>
