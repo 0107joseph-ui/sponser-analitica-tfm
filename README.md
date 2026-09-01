@@ -31,6 +31,8 @@ datos, modelo de pronóstico y dashboard interactivo.
 12. [Diccionario de datos](#diccionario-de-datos)
 13. [Reproducir el pipeline desde cero](#reproducir-el-pipeline-desde-cero)
 14. [Limitaciones conocidas y trabajo futuro](#limitaciones-conocidas-y-trabajo-futuro)
+15. [Documentación adicional](#documentación-adicional)
+16. [Licencia](#licencia)
 
 ## Contexto del problema
 
@@ -124,6 +126,12 @@ sponser-analitica-tfm/
 │   │   └── Sponser Analitica v2 Ilustrada.dc.html   # Dashboard (HTML + JS, sin build step)
 │   └── requirements.txt
 │
+├── docs/                          # Documentación técnica ampliada (ver más abajo)
+│   ├── arquitectura.md
+│   ├── pipeline_datos.md
+│   └── modelado.md
+│
+├── LICENSE.md
 └── README.md
 ```
 
@@ -364,3 +372,26 @@ fechas, advertencias de archivos con formato inesperado, etc.).
   al abrir la página (ver [Arrancar el frontend](#3-arrancar-el-frontend)).
   Una versión totalmente offline requeriría empaquetar esas librerías junto
   al repositorio en vez de cargarlas por CDN.
+
+## Documentación adicional
+
+Este README cubre lo necesario para instalar, correr y entender el
+proyecto de punta a punta. Para el detalle técnico más profundo de cada
+componente:
+
+- [`docs/arquitectura.md`](docs/arquitectura.md) — decisiones de diseño
+  (por qué `sponser_api` nunca importa `sponser_etl`, las dos capas de
+  caché del backend, seguridad).
+- [`docs/pipeline_datos.md`](docs/pipeline_datos.md) — extracción,
+  transformación y carga paso a paso, incluyendo el formato real (no
+  Excel) de los reportes de venta.
+- [`docs/modelado.md`](docs/modelado.md) — por qué una arquitectura
+  "hurdle", features, metodología de validación, y una tabla comparativa
+  de las 8 versiones del modelo entrenadas durante el desarrollo con sus
+  métricas reales.
+
+## Licencia
+
+Ver [`LICENSE.md`](LICENSE.md) — este repositorio incluye datos comerciales
+reales de un cliente, autorizados exclusivamente para esta evaluación
+académica; no es software ni datos de uso libre.

@@ -1,0 +1,13 @@
+# Normaliza finales de línea a LF en el repositorio; Git los convierte a
+# CRLF al hacer checkout en Windows según la configuración local de cada
+# quien clona, sin que eso genere diffs espurios entre sistemas operativos.
+* text=auto eol=lf
+
+# Binarios: nunca tocar finales de línea.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.xls binary
+*.xlsx binary
+*.db binary

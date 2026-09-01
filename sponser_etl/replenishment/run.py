@@ -56,6 +56,20 @@ def cargar_inputs():
         os.path.join(PROCESSED_DIR, "demanda_promedio_sku.csv"), dtype={"codigo_producto": str}
     )
 
+    # Curva día a día del pronóstico (estacionalidad, eventos, tendencia) --
+    # demanda_promedio_sku.csv (arriba) es el promedio de esta misma curva,
+    # usado como respaldo para los días del horizonte de compra que caen más
+    # allá de lo pronosticado (ver construir_demanda_diaria).
+    forecast = pd.read_csv(
+        os.path.join(PROCESSED_DIR, "forecast_demanda_producto.csv"),
+        dtype={"codigo_producto": str}, parse_dates=["fecha"],
+    )
+    forecast["fecha"] = forecast["fecha"].dt.date
+    forecast_por_sku = {
+        codigo: grupo.set_index("fecha")["unidades_pronosticadas"]
+        for codigo, grupo in forecast.groupby("codigo_producto")
+    }
+
     inv = pd.read_csv(
         os.path.join(PROCESSED_DIR, "inventario_lotes.csv"), dtype={"codigo_producto": str}
     )
@@ -71,7 +85,7 @@ def cargar_inputs():
         ofertas["arrival_date"] = pd.to_datetime(ofertas["arrival_date"]).dt.date
         ofertas["expiry_date"] = pd.to_datetime(ofertas["expiry_date"]).dt.date
 
-    return demanda, inv, cfg, ofertas
+    return demanda, forecast_por_sku, inv, cfg, ofertas
 
 
 def cargar_descripciones() -> pd.Series:
@@ -89,13 +103,29 @@ def cargar_descripciones() -> pd.Series:
     return ventas.groupby("codigo_producto")["descripcion"].agg(lambda s: s.mode().iat[0])
 
 
-def calcular_recomendacion(demanda: pd.DataFrame, inv: pd.DataFrame, cfg: pd.DataFrame, ofertas: pd.DataFrame, hoy) -> pd.DataFrame:
+def construir_demanda_diaria(daily_avg: float, curva: pd.Series | None, start, end) -> pd.Series:
+    """Serie día a día para el horizonte de compra completo: usa la curva
+    pronosticada por el modelo mientras haya un valor para esa fecha, y el
+    promedio (daily_avg) como respaldo para los días del horizonte que caen
+    más allá del último día pronosticado (el horizonte de compra puede
+    extenderse más que el pronóstico si el inventario o una oferta de
+    proveedor vencen más tarde -- ver fifo.construir_horizonte)."""
+    fechas = list(fifo.rango_fechas(start, end))
+    if curva is None or curva.empty:
+        return pd.Series([daily_avg] * len(fechas), index=fechas, dtype=float)
+    valores = [float(curva[f]) if f in curva.index else daily_avg for f in fechas]
+    return pd.Series(valores, index=fechas, dtype=float)
+
+
+def calcular_recomendacion(
+    demanda: pd.DataFrame, forecast_por_sku: dict, inv: pd.DataFrame, cfg: pd.DataFrame, ofertas: pd.DataFrame, hoy,
+) -> pd.DataFrame:
     cfg_idx = cfg.set_index("codigo_producto")
     filas = []
 
     for _, row in demanda.iterrows():
         codigo = row["codigo_producto"]
-        daily_demand = float(row["daily_demand"])
+        daily_avg = float(row["daily_demand"])
 
         if codigo in cfg_idx.index:
             params = cfg_idx.loc[codigo]
@@ -108,7 +138,8 @@ def calcular_recomendacion(demanda: pd.DataFrame, inv: pd.DataFrame, cfg: pd.Dat
         sku_ofertas = ofertas[ofertas["sku"] == codigo] if not ofertas.empty else ofertas
 
         start, end = fifo.construir_horizonte(sku_inv, sku_ofertas, lt, cov, saf, hoy)
-        residual, expirado, _servido = fifo.consumir_fifo_solo_inventario(daily_demand, sku_inv, start, end)
+        demanda_diaria = construir_demanda_diaria(daily_avg, forecast_por_sku.get(codigo), start, end)
+        residual, expirado, _servido = fifo.consumir_fifo_solo_inventario(demanda_diaria, sku_inv, start, end)
         asignado, residual_final, riesgo = fifo.asignar_ofertas_a_residual(residual, sku_ofertas)
 
         demanda_no_cubierta = float(residual_final.clip(lower=0).sum())
@@ -117,7 +148,7 @@ def calcular_recomendacion(demanda: pd.DataFrame, inv: pd.DataFrame, cfg: pd.Dat
 
         filas.append({
             "codigo_producto": codigo,
-            "daily_demand": daily_demand,
+            "daily_demand": daily_avg,
             "dias_horizonte": (end - start).days + 1,
             "unidades_en_inventario": float(sku_inv["qty"].sum()) if not sku_inv.empty else 0.0,
             "unidades_en_riesgo_vencimiento": float(expirado) + float(riesgo_ofertas),
@@ -131,11 +162,11 @@ def calcular_recomendacion(demanda: pd.DataFrame, inv: pd.DataFrame, cfg: pd.Dat
 def main() -> int:
     print(ADVERTENCIA)
 
-    demanda, inv, cfg, ofertas = cargar_inputs()
+    demanda, forecast_por_sku, inv, cfg, ofertas = cargar_inputs()
     hoy = cargar_as_of_date()
     print(f"Calculando recomendación de compra para {len(demanda)} productos (referencia: hoy = {hoy}, última venta real registrada)...")
 
-    recomendacion = calcular_recomendacion(demanda, inv, cfg, ofertas, hoy)
+    recomendacion = calcular_recomendacion(demanda, forecast_por_sku, inv, cfg, ofertas, hoy)
 
     descripciones = cargar_descripciones()
     recomendacion.insert(1, "descripcion", recomendacion["codigo_producto"].map(descripciones).fillna(""))
