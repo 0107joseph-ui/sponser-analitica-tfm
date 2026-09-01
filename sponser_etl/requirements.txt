@@ -1,4 +1,6 @@
-pandas>=2.0
-openpyxl>=3.1
-lightgbm>=4.0
-scikit-learn>=1.3
+pandas==3.0.2
+numpy==2.4.4
+openpyxl==3.1.5
+lightgbm==4.7.0
+scikit-learn==1.8.0  # requerido por lgb.LGBMClassifier/LGBMRegressor (modeling/train.py), aunque el código nunca importa sklearn directamente
+requests==2.34.2  # scrape_product_images.py

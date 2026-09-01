@@ -182,6 +182,12 @@ python -m http.server 5500
 
 Abrir `http://localhost:5500/Sponser%20Analitica%20v2%20Ilustrada.dc.html`.
 
+> **Requiere conexión a internet** la primera vez que se abre en el
+> navegador: `support.js` carga React, ReactDOM y Babel desde `unpkg.com` en
+> tiempo de ejecución (no vienen empaquetados en el repo). Sin internet, la
+> página queda en blanco aunque el backend esté corriendo -- ver
+> [Limitaciones conocidas](#limitaciones-conocidas-y-trabajo-futuro).
+
 ## Credenciales de acceso
 
 | Correo | Contraseña | Rol |
@@ -353,3 +359,8 @@ fechas, advertencias de archivos con formato inesperado, etc.).
 - **Modelo**: entrenado sobre ~3 años de historia (2023-2026); SKUs nuevos o
   con muy poca historia dependen más del histórico promedio que de patrones
   propios aprendidos.
+- **Frontend con una dependencia de red**: aunque todo el backend y los datos
+  son 100% locales, el dashboard carga React/ReactDOM/Babel desde `unpkg.com`
+  al abrir la página (ver [Arrancar el frontend](#3-arrancar-el-frontend)).
+  Una versión totalmente offline requeriría empaquetar esas librerías junto
+  al repositorio en vez de cargarlas por CDN.
