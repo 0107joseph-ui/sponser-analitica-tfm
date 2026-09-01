@@ -5,11 +5,10 @@ Sistema de analítica comercial, pronóstico de demanda y reabastecimiento para
 datos, modelo de pronóstico y dashboard interactivo.
 
 > **Trabajo final de graduación — Maestría en Data Science**
-> - Autor: _completar_
-> - Universidad / programa: _completar_
-> - Asesor(a): _completar_
-> - Fecha de entrega: _completar_
->
+> - Autor: Joseph Alejandro Mora Murillo
+> - Máster Data Science, Big Data & Business Analytics 2025-2026 (Semi-presencial)
+> - Universidad Complutense de Madrid UCM (NTIC)
+> 
 > Este repositorio incluye el código completo **y los datos reales** del
 > cliente (autorizados para este trabajo académico) para que el pipeline, el
 > modelo y el dashboard se puedan ejecutar de principio a fin sin depender de
