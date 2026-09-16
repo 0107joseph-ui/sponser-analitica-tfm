@@ -16,7 +16,13 @@ from dataclasses import dataclass
 
 from .. import config
 
-_PATRON_VENTAS = re.compile(r"^(com|control) sponser \d{4}\.xls$", re.IGNORECASE)
+_PATRON_VENTAS = re.compile(r"^(com|control) sponser (\d{4})\.xls$", re.IGNORECASE)
+# El sistema fuente exporta con este otro nombre ("Ventas COM ene - sep
+# 2026.xls", "Ventas CON ene - sep 2026.xls" -- "CON" es como abrevia
+# "Control" ahí, no "Control" completo). Se acepta también y se normaliza al
+# nombre canónico de arriba, que es el que espera el glob de extract.py.
+_PATRON_VENTAS_EXPORT = re.compile(r"^ventas\s+(com|con)\b.*?(\d{4})\.xls$", re.IGNORECASE)
+_FUENTE_POR_ABREVIATURA = {"com": "COM", "con": "Control", "control": "Control"}
 _PATRON_INVENTARIO = re.compile(r"^inventario.*\.xlsx$", re.IGNORECASE)
 
 # Nombre fijo de guardado para inventario: extract.extract_inventario() toma
@@ -43,8 +49,14 @@ def _clasificar(nombre_archivo: str) -> tuple[str, str] | None:
     directorio del archivo original (siempre `os.path.basename`), así que no
     hace falta sanitizar path traversal aparte."""
     base = os.path.basename(nombre_archivo)
-    if _PATRON_VENTAS.match(base):
+    m = _PATRON_VENTAS.match(base)
+    if m:
         return "ventas", base
+    m = _PATRON_VENTAS_EXPORT.match(base)
+    if m:
+        fuente = _FUENTE_POR_ABREVIATURA[m.group(1).lower()]
+        anio = m.group(2)
+        return "ventas", f"{fuente} Sponser {anio}.xls"
     if _PATRON_INVENTARIO.match(base):
         return "inventario", _NOMBRE_INVENTARIO
     return None
@@ -62,7 +74,9 @@ def guardar(nombre_original: str, contenido: bytes) -> ResultadoCarga:
         return ResultadoCarga(
             nombre_original, None, None, False,
             'Nombre no reconocido. Debe ser "COM Sponser AAAA.xls", '
-            '"Control Sponser AAAA.xls" o "Inventario*.xlsx".',
+            '"Control Sponser AAAA.xls", el export directo del sistema '
+            '("Ventas COM ... AAAA.xls" / "Ventas CON ... AAAA.xls") o '
+            '"Inventario*.xlsx".',
         )
 
     tipo, nombre_guardado = clasificado

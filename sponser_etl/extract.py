@@ -121,13 +121,24 @@ def extract_ventas(raw_dir: str) -> ResultadoExtraccion:
             if datos:
                 datos = datos[:-1]  # última fila = totales del reporte, no confiable
 
-            if [h.strip() for h in header] != COLUMNAS_VENTAS:
+            # Se valida por nombre de columna, no por posición exacta: el
+            # sistema fuente agregó una columna "Marca" en algún momento
+            # entre los reportes históricos (2023-2025, sin Marca) y los
+            # actuales (con Marca, entre Proveedor y Cantidad) -- exigir la
+            # lista exacta rechazaba los reportes nuevos, y armar el
+            # DataFrame por posición con una columna de más habría corrido
+            # todo lo que viene después de Marca una posición, mezclando
+            # Cantidad con Marca, montounitario con Cantidad, etc.
+            header_limpio = [h.strip() for h in header]
+            faltantes = [c for c in COLUMNAS_VENTAS if c not in header_limpio]
+            if faltantes:
                 errores.append(
-                    f"{nombre}: encabezados distintos a lo esperado ({header}), se omite"
+                    f"{nombre}: faltan columnas esperadas {faltantes} (encabezado: {header_limpio}), se omite"
                 )
                 continue
 
-            df = pd.DataFrame(datos, columns=COLUMNAS_VENTAS)
+            df_crudo = pd.DataFrame(datos, columns=header_limpio)
+            df = df_crudo[COLUMNAS_VENTAS]  # por nombre: ignora columnas extra (ej. Marca)
             df["fuente"] = fuente
             df["anio"] = anio
             df["archivo_origen"] = nombre

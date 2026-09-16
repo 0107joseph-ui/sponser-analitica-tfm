@@ -226,6 +226,14 @@ def _build_clients_para_anio_impl(year: int, n: int) -> list[dict]:
     detalle_anio = detalle[detalle["fecha"].dt.year == year].copy()
     detalle_anio["mes"] = detalle_anio["fecha"].dt.month
 
+    # Ventas sin cliente identificado (ej. "Cliente Contado", venta de
+    # mostrador sin No. Expediente registrado) quedan con id_cliente NaN --
+    # se excluyen de la lista por cliente (no hay a quién atribuírselas ni
+    # nada válido que mostrar como "id" en la tarjeta), pero su monto sigue
+    # contando en cualquier agregado que no dependa de agrupar por cliente
+    # (KPIs, ventas por producto, etc., que leen `detalle` sin este filtro).
+    detalle_anio = detalle_anio[detalle_anio["id_cliente"].notna()]
+
     activos = detalle_anio.drop_duplicates("id_cliente")[["id_cliente", "nombre_cliente"]]
 
     monthly_por_cliente = (
