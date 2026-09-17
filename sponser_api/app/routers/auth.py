@@ -10,49 +10,12 @@ from ..services import email_service
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-@router.post("/login", response_model=schemas.LoginOtpRequired)
+@router.post("/login", response_model=schemas.UsuarioOut)
 def login(datos: schemas.LoginRequest, request: Request, db: Session = Depends(get_db)):
     usuario = security.autenticar(db, datos.email.strip().lower(), datos.password)
-
-    codigo = security.generar_codigo_otp()
-    try:
-        email_service.enviar_otp(usuario.email, usuario.nombre, codigo, config.OTP_EXPIRA_MINUTOS)
-    except email_service.EmailSendError:
-        raise HTTPException(status_code=502, detail="No pudimos enviar el código de verificación. Intentá de nuevo en unos minutos.")
-    security.persistir_otp(db, usuario, codigo, reenvio=False)
-
-    request.session.clear()
-    request.session["otp_usuario_id"] = usuario.id
-    return schemas.LoginOtpRequired(email=usuario.email)
-
-
-@router.post("/otp/verify", response_model=schemas.UsuarioOut)
-def verificar_otp(
-    datos: schemas.OtpVerifyRequest,
-    request: Request,
-    usuario=Depends(security.usuario_pendiente_otp),
-    db: Session = Depends(get_db),
-):
-    security.verificar_otp(db, usuario, datos.code)
     request.session.clear()
     request.session["usuario_id"] = usuario.id
     return schemas.UsuarioOut(email=usuario.email, nombre=usuario.nombre, rol=usuario.rol)
-
-
-@router.post("/otp/resend", response_model=schemas.OtpResendResponse)
-def reenviar_otp(usuario=Depends(security.usuario_pendiente_otp), db: Session = Depends(get_db)):
-    puede, restante = security.puede_reenviar_otp(usuario)
-    if not puede:
-        detalle = "Ya reenviamos el código el máximo de veces permitido. Volvé a iniciar sesión." if restante == 0 else "Esperá un momento antes de pedir otro código."
-        raise HTTPException(status_code=429, detail=detalle, headers={"Retry-After": str(restante)} if restante else None)
-
-    codigo = security.generar_codigo_otp()
-    try:
-        email_service.enviar_otp(usuario.email, usuario.nombre, codigo, config.OTP_EXPIRA_MINUTOS)
-    except email_service.EmailSendError:
-        raise HTTPException(status_code=502, detail="No pudimos enviar el código de verificación. Intentá de nuevo en unos minutos.")
-    security.persistir_otp(db, usuario, codigo, reenvio=True)
-    return schemas.OtpResendResponse(cooldownSegundos=config.OTP_REENVIO_COOLDOWN_SEGUNDOS)
 
 
 @router.post("/forgot", response_model=schemas.ForgotPasswordResponse)

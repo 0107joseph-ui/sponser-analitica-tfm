@@ -93,13 +93,7 @@ def crear_usuario_invitado(db: Session, email: str, nombre: str | None, rol: str
     return usuario, token
 
 
-# --- Verificación en dos pasos (OTP por correo) y restablecimiento de contraseña ---
-
-
-def generar_codigo_otp() -> str:
-    """Código numérico de OTP_LARGO dígitos. secrets.randbelow es
-    criptográficamente seguro (a diferencia de random)."""
-    return str(secrets.randbelow(10 ** config.OTP_LARGO)).zfill(config.OTP_LARGO)
+# --- Restablecimiento de contraseña ---
 
 
 def _hash_secreto(valor: str) -> str:
@@ -122,79 +116,6 @@ def _limpiar_otp(usuario: models_db.Usuario) -> None:
     usuario.otp_expira_en = None
     usuario.otp_enviado_en = None
     usuario.otp_reenvios = 0
-
-
-def registrar_intento_fallido(db: Session, usuario: models_db.Usuario) -> bool:
-    """Incrementa el contador unificado de tanteos fallidos (mismo campo que
-    usa autenticar() para la contraseña) y aplica el mismo bloqueo si se
-    agota. Devuelve True si esto dejó la cuenta bloqueada."""
-    usuario.intentos_fallidos += 1
-    bloqueada = usuario.intentos_fallidos >= config.MAX_INTENTOS_LOGIN
-    if bloqueada:
-        usuario.bloqueado_hasta = dt.datetime.utcnow() + dt.timedelta(minutes=config.BLOQUEO_MINUTOS)
-        _limpiar_otp(usuario)
-    db.commit()
-    return bloqueada
-
-
-def persistir_otp(db: Session, usuario: models_db.Usuario, codigo: str, reenvio: bool) -> None:
-    """Se llama DESPUÉS de que el correo se envió con éxito -- si el envío
-    falla, no debe quedar en la base un código que el usuario nunca recibió."""
-    ahora = dt.datetime.utcnow()
-    usuario.otp_hash = _hash_secreto(codigo)
-    usuario.otp_expira_en = ahora + dt.timedelta(minutes=config.OTP_EXPIRA_MINUTOS)
-    usuario.otp_enviado_en = ahora
-    usuario.otp_reenvios = usuario.otp_reenvios + 1 if reenvio else 0
-    db.commit()
-
-
-def puede_reenviar_otp(usuario: models_db.Usuario) -> tuple[bool, int]:
-    """(puede_reenviar, segundos_restantes_de_cooldown)."""
-    if usuario.otp_reenvios >= config.OTP_MAX_REENVIOS:
-        return False, 0
-    if usuario.otp_enviado_en:
-        transcurrido = (dt.datetime.utcnow() - usuario.otp_enviado_en).total_seconds()
-        restante = config.OTP_REENVIO_COOLDOWN_SEGUNDOS - transcurrido
-        if restante > 0:
-            return False, int(restante) + 1
-    return True, 0
-
-
-def verificar_otp(db: Session, usuario: models_db.Usuario, codigo: str) -> None:
-    """Lanza HTTPException: 400 si el código venció (caducidad, no cuenta
-    como tanteo), 401 si no coincide (sí cuenta), 423 si esto agota el
-    presupuesto de intentos."""
-    ahora = dt.datetime.utcnow()
-    if not usuario.otp_hash or not usuario.otp_expira_en or usuario.otp_expira_en <= ahora:
-        raise HTTPException(status_code=400, detail="El código venció. Pedí uno nuevo.")
-
-    if not _comparar_hash(codigo, usuario.otp_hash):
-        if registrar_intento_fallido(db, usuario):
-            raise HTTPException(
-                status_code=423,
-                detail="Cuenta bloqueada por intentos fallidos. Restablecé tu contraseña para volver a entrar.",
-            )
-        raise HTTPException(status_code=401, detail="Ese código no es válido. Revisá los 6 dígitos e intentá de nuevo.")
-
-    usuario.intentos_fallidos = 0
-    usuario.bloqueado_hasta = None
-    usuario.ultimo_login = ahora
-    _limpiar_otp(usuario)
-    db.commit()
-
-
-def usuario_pendiente_otp(request: Request, db: Session = Depends(get_db)) -> models_db.Usuario:
-    """Como usuario_actual, pero para la sesión de menor privilegio que deja
-    /api/auth/login mientras falta verificar el OTP -- una clave de sesión
-    distinta a usuario_id, así ningún endpoint de negocio (todos dependen de
-    usuario_actual) queda accesible hasta pasar el segundo factor."""
-    usuario_id = request.session.get("otp_usuario_id")
-    if not usuario_id:
-        raise HTTPException(status_code=401, detail="No hay una verificación pendiente.")
-    usuario = db.get(models_db.Usuario, usuario_id)
-    if usuario is None or not usuario.activo:
-        raise HTTPException(status_code=401, detail="No hay una verificación pendiente.")
-    return usuario
 
 
 def generar_reset_token(db: Session, usuario: models_db.Usuario) -> str:

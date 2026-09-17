@@ -1,5 +1,5 @@
-"""Envío de correo para el login en dos pasos (OTP) y el restablecimiento de
-contraseña. SMTP genérico por variables de entorno (ver config.py) -- si
+"""Envío de correo para invitaciones y el restablecimiento de contraseña.
+SMTP genérico por variables de entorno (ver config.py) -- si
 SPONSER_API_SMTP_HOST no está seteado, cae en "modo consola": loguea el
 correo completo (incluyendo el código/enlace) en vez de enviarlo, para poder
 desarrollar y probar localmente sin credenciales reales.
@@ -53,18 +53,6 @@ def enviar_correo(destinatario: str, asunto: str, cuerpo_texto: str) -> None:
     except (smtplib.SMTPException, OSError) as e:
         logger.error("Fallo enviando correo a %s: %s", destinatario, e)
         raise EmailSendError(str(e)) from e
-
-
-def enviar_otp(destinatario: str, nombre: str | None, codigo: str, expira_minutos: int) -> None:
-    saludo = f"Hola {nombre}," if nombre else "Hola,"
-    cuerpo = (
-        f"{saludo}\n\n"
-        f"Tu código de verificación para ingresar a Sponser Analítica es:\n\n"
-        f"    {codigo}\n\n"
-        f"Vence en {expira_minutos} minutos y es de un solo uso. "
-        f"Si no intentaste iniciar sesión, ignorá este correo.\n"
-    )
-    enviar_correo(destinatario, "Tu código de verificación - Sponser Analítica", cuerpo)
 
 
 def enviar_invitacion(destinatario: str, nombre: str | None, enlace: str, rol: str, expira_minutos: int) -> None:

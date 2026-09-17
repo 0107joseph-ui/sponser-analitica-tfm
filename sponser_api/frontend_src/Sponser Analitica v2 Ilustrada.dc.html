@@ -175,51 +175,6 @@
         </div>
         </sc-if>
 
-        <sc-if value="{{ viewOtp }}" hint-placeholder-val="{{ false }}">
-        <form onSubmit="{{ verifyOtp }}">
-          <a href="#" onClick="{{ goSignin }}" style="font-size:13px;display:inline-flex;align-items:center;gap:6px">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="m12 19-7-7 7-7"></path></svg>
-            Volver a iniciar sesión
-          </a>
-          <span class="lbl" style="display:block;margin-top:var(--space-4)">Verificación en dos pasos</span>
-          <h2 style="font-size:32px;margin:var(--space-2) 0 var(--space-1)">Ingresá el código</h2>
-          <p class="text-muted" style="font-size:14px;line-height:1.5;margin:0 0 var(--space-6)">Te enviamos un código de 6 dígitos a <strong>{{ otpEmail }}</strong>. Vence en 10 minutos.</p>
-
-          <sc-if value="{{ otpHasError }}" hint-placeholder-val="{{ false }}">
-            <div class="authalert" style="border:2px solid var(--color-accent);background:var(--color-accent-100);padding:var(--space-3);margin-bottom:var(--space-4);display:flex;gap:var(--space-3);align-items:flex-start">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" stroke-width="2" stroke-linecap="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6"></path><path d="M12 16.5v.01"></path></svg>
-              <div style="min-width:0">
-                <span style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--color-accent-700)">{{ otpErrorTitle }}</span>
-                <span style="display:block;font-size:13px;line-height:1.45;color:var(--color-accent-900);margin-top:3px">{{ otpError }}</span>
-                <sc-if value="{{ otpShowAttempts }}" hint-placeholder-val="{{ false }}">
-                  <span style="display:block;font-size:12px;color:var(--color-accent-700);margin-top:6px">{{ otpAttemptsLabel }}</span>
-                </sc-if>
-              </div>
-            </div>
-          </sc-if>
-
-          <div class="field">
-            <label for="otp-code">Código de verificación</label>
-            <input id="otp-code" class="input {{ otpErrClass }}" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength="6" placeholder="000000" value="{{ otpCode }}" onChange="{{ setOtpCode }}">
-          </div>
-
-          <sc-if value="{{ otpIdle }}" hint-placeholder-val="{{ true }}">
-            <button type="submit" class="btn btn-primary" style="width:100%">Verificar</button>
-          </sc-if>
-          <sc-if value="{{ otpBusy }}" hint-placeholder-val="{{ false }}">
-            <div style="width:100%">
-              <div style="height:4px;background:var(--color-neutral-200)"><div style="height:4px;background:var(--color-accent);animation:upbar 0.9s ease-out forwards"></div></div>
-              <span class="text-muted" style="font-size:13px;display:block;margin-top:8px">Verificando código…</span>
-            </div>
-          </sc-if>
-
-          <div style="display:flex;justify-content:space-between;gap:var(--space-3);margin-top:var(--space-4)">
-            <a href="#" onClick="{{ resendOtp }}" style="font-size:13px">{{ otpResendLabel }}</a>
-            <span class="text-muted" style="font-size:13px">Soporte TI</span>
-          </div>
-        </form>
-        </sc-if>
-
         <sc-if value="{{ viewReset }}" hint-placeholder-val="{{ false }}">
           <sc-if value="{{ resetPwDone }}" hint-placeholder-val="{{ false }}">
             <div>
@@ -2168,14 +2123,6 @@ class Component extends DCLogic {
     resetState: 'idle',
     resetError: '',
     resendCount: 0,
-    otpEmail: '',
-    otpCode: '',
-    otpBusy: false,
-    otpError: '',
-    otpErrorTitle: '',
-    otpAttempts: 0,
-    otpResendCooldown: false,
-    otpResendCount: 0,
     resetToken: '',
     resetPwDone: false,
     newPassword: '',
@@ -3725,7 +3672,6 @@ class Component extends DCLogic {
       viewSignin: S.authView === 'signin',
       viewForgot: S.authView === 'forgot',
       viewSent: S.authView === 'sent',
-      viewOtp: S.authView === 'otp',
       viewReset: S.authView === 'reset',
       setAuthUser: (e) => this.setState({ authUser: e.target.value, authError: '' }),
       setAuthPass: (e) => this.setState({ authPass: e.target.value, authError: '' }),
@@ -3735,7 +3681,6 @@ class Component extends DCLogic {
         history.replaceState(null, '', window.location.pathname);
         this.setState({
           authView: 'signin', authError: '', authErrorTitle: '', authAttempts: 0, authPass: '',
-          otpCode: '', otpError: '', otpErrorTitle: '', otpAttempts: 0, otpResendCooldown: false, otpResendCount: 0,
           resetToken: '', resetPwDone: false, newPassword: '', newPasswordConfirm: '', resetPwError: '', resetPwErrorTitle: '',
         });
       },
@@ -3773,15 +3718,17 @@ class Component extends DCLogic {
           return;
         }
         this.setState({ authBusy: true, authError: '', authErrorTitle: '' });
+        let rolVerificado = 'admin';
+        let emailVerificado = '';
         this.api('/api/auth/login', {
           method: 'POST',
           body: JSON.stringify({ email: S.authUser.trim(), password: S.authPass }),
         })
-          .then(res => {
+          .then(res => { rolVerificado = res.rol; emailVerificado = res.email; return this.cargarBootstrap(); })
+          .then(() => {
             this.setState({
               authBusy: false, authAttempts: 0, authError: '', authErrorTitle: '', authPass: '',
-              authView: 'otp', otpEmail: res.email, otpCode: '', otpAttempts: 0, otpError: '', otpErrorTitle: '',
-              otpResendCooldown: false, otpResendCount: 0,
+              loggedIn: true, rol: rolVerificado, miEmail: emailVerificado,
             });
           })
           .catch(err => {
@@ -3791,77 +3738,6 @@ class Component extends DCLogic {
               authErrorTitle: bloqueado ? 'Cuenta bloqueada' : 'Credenciales incorrectas',
               authError: err.message,
             }));
-          });
-      },
-      otpEmail: S.otpEmail,
-      otpCode: S.otpCode,
-      otpBusy: S.otpBusy,
-      otpIdle: !S.otpBusy,
-      otpHasError: !!S.otpError,
-      otpError: S.otpError,
-      otpErrorTitle: S.otpErrorTitle || 'Revisá el código',
-      otpShowAttempts: S.otpAttempts > 0 && S.otpAttempts < 5,
-      otpAttemptsLabel: 'Intento ' + S.otpAttempts + ' de 5. Tras 5 intentos fallidos la cuenta se bloquea 15 minutos.',
-      otpErrClass: S.otpErrorTitle === 'Código incorrecto' ? 'err' : '',
-      otpResendLabel: S.otpResendCooldown ? 'Reenviar disponible en breve…' : 'Reenviar código',
-      setOtpCode: (e) => this.setState({ otpCode: e.target.value.replace(/\D/g, '').slice(0, 6), otpError: '' }),
-      verifyOtp: (e) => {
-        if (e && e.preventDefault) e.preventDefault();
-        if (S.otpAttempts >= 5) return;
-        const code = S.otpCode.trim();
-        if (!/^\d{6}$/.test(code)) {
-          this.setState({ otpErrorTitle: 'Código inválido', otpError: 'Ingresá los 6 dígitos del código.' });
-          return;
-        }
-        this.setState({ otpBusy: true, otpError: '', otpErrorTitle: '' });
-        let rolVerificado = 'admin';
-        let emailVerificado = '';
-        this.api('/api/auth/otp/verify', { method: 'POST', body: JSON.stringify({ code }) })
-          .then((yo) => { rolVerificado = yo.rol; emailVerificado = yo.email; return this.cargarBootstrap(); })
-          .then(() => {
-            this.setState({
-              otpBusy: false, loggedIn: true, otpCode: '', otpAttempts: 0, otpError: '', otpErrorTitle: '',
-              rol: rolVerificado, miEmail: emailVerificado,
-            });
-          })
-          .catch(err => {
-            if (err.status === 423) {
-              this.setState({
-                otpBusy: false, otpCode: '', authView: 'signin', authAttempts: 5,
-                authErrorTitle: 'Cuenta bloqueada', authError: err.message,
-              });
-              return;
-            }
-            this.setState(s => ({
-              otpBusy: false, otpCode: '',
-              otpAttempts: err.status === 401 ? s.otpAttempts + 1 : s.otpAttempts,
-              otpErrorTitle: err.status === 400 ? 'Código vencido' : 'Código incorrecto',
-              otpError: err.message,
-            }));
-          });
-      },
-      resendOtp: (e) => {
-        if (e && e.preventDefault) e.preventDefault();
-        if (S.otpResendCooldown) return;
-        this.setState({ otpResendCooldown: true, otpError: '', otpErrorTitle: '' });
-        this.api('/api/auth/otp/resend', { method: 'POST' })
-          .then(res => {
-            this.setState(s => ({ otpResendCount: s.otpResendCount + 1 }));
-            setTimeout(() => this.setState({ otpResendCooldown: false }), (res.cooldownSegundos || 30) * 1000);
-          })
-          .catch(err => {
-            if (err.status === 423) {
-              this.setState({
-                otpResendCooldown: false, authView: 'signin', authAttempts: 5,
-                authErrorTitle: 'Cuenta bloqueada', authError: err.message,
-              });
-              return;
-            }
-            this.setState({
-              otpResendCooldown: err.status === 429,
-              otpErrorTitle: err.status === 429 ? 'Esperá un momento' : 'No se pudo reenviar',
-              otpError: err.message,
-            });
           });
       },
       resetPwDone: S.resetPwDone,
@@ -3895,7 +3771,6 @@ class Component extends DCLogic {
         this.api('/api/auth/logout', { method: 'POST' }).catch(() => {});
         this.setState({
           loggedIn: false, authView: 'signin', authPass: '', authError: '', authErrorTitle: '', authAttempts: 0,
-          otpCode: '', otpError: '', otpErrorTitle: '', otpAttempts: 0, otpResendCooldown: false,
           // Nunca vacíos: renderVals() asume al menos 1 elemento (ver el
           // comentario junto a estos mismos placeholders en el estado inicial).
           products: [EMPTY_PRODUCT], clients: [EMPTY_CLIENT], lineasComerciales: [],

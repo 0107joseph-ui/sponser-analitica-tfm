@@ -19,20 +19,6 @@ class UsuarioOut(BaseModel):
     rol: Literal["admin", "viewer"] = "admin"
 
 
-class LoginOtpRequired(BaseModel):
-    otpRequired: bool = True
-    email: str
-
-
-class OtpVerifyRequest(BaseModel):
-    code: str = Field(min_length=6, max_length=6)
-
-
-class OtpResendResponse(BaseModel):
-    ok: bool = True
-    cooldownSegundos: int
-
-
 class ForgotPasswordRequest(BaseModel):
     email: str
 

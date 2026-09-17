@@ -114,13 +114,13 @@ sponser-analitica-tfm/
 │   │   ├── main.py                 # App FastAPI, middlewares, routers
 │   │   ├── config.py               # Rutas, variables de entorno, defaults de desarrollo
 │   │   ├── models_db.py            # Modelos SQLAlchemy (usuarios, metas, bitácora, pedidos)
-│   │   ├── security.py             # Login, OTP por correo, roles, reseteo de contraseña
+│   │   ├── security.py             # Login, roles, reseteo de contraseña
 │   │   ├── routers/                # Endpoints REST (auth, bootstrap, datos, pedido, usuarios, reportes)
 │   │   └── services/
 │   │       ├── data_access.py      # Capa de consultas: lee CSV, agrega, cachea
 │   │       ├── pipeline_runner.py  # Dispara sponser_etl como subproceso
 │   │       ├── carga_archivos.py   # Valida y guarda archivos subidos desde la web
-│   │       └── email_service.py    # Envío de correo (OTP, invitaciones, reseteo)
+│   │       └── email_service.py    # Envío de correo (invitaciones, reseteo de contraseña)
 │   ├── frontend_src/
 │   │   └── Sponser Analitica v2 Ilustrada.dc.html   # Dashboard (HTML + JS, sin build step)
 │   └── requirements.txt
@@ -143,7 +143,7 @@ sponser-analitica-tfm/
 | Pipeline de datos | Python, pandas |
 | Modelado | LightGBM (clasificación + regresión Poisson), scikit-learn |
 | Backend | FastAPI, SQLAlchemy, SQLite |
-| Autenticación | Sesión por cookie + verificación en dos pasos (OTP por correo) |
+| Autenticación | Sesión por cookie (correo + contraseña) |
 | Frontend | HTML + JavaScript (sin framework, sin build step) |
 | Correo | SMTP genérico (modo consola si no hay credenciales configuradas) |
 
@@ -229,21 +229,8 @@ Abrir `http://localhost:5500/Sponser%20Analitica%20v2%20Ilustrada.dc.html`.
 |---|---|---|
 | `m.jimenez@sponser.cr` | `sponser2026` | Administrador |
 
-El login pide un segundo factor (código de 6 dígitos por correo). Como no
-hay credenciales SMTP configuradas por defecto, el sistema cae en **modo
-consola**: el código aparece impreso en la terminal donde corre `uvicorn`,
-justo después de intentar iniciar sesión. Buscar el bloque:
-
-```
-===== CORREO (modo consola -- SPONSER_API_SMTP_HOST no configurado) =====
-Para: m.jimenez@sponser.cr
-Asunto: Tu código de verificación - Sponser Analítica
-...
-    123456
-...
-```
-
-Desde la pestaña "Carga de datos", el administrador puede invitar más
+El login es de un solo paso (correo + contraseña, sin verificación
+adicional). Desde la pestaña "Carga de datos", el administrador puede invitar más
 usuarios con rol de administrador o de solo lectura (ver
 [Manejo de entorno y seguridad](#manejo-de-entorno-y-seguridad)).
 
@@ -336,10 +323,8 @@ build step, JavaScript plano sobre un pequeño framework de plantillas
   `sponser_api/app/config.py`): secreto de firma de sesión, credenciales
   SMTP, credenciales del usuario administrador inicial, URLs base del
   frontend/backend. Ninguna es obligatoria para correr esto localmente.
-- **Autenticación en dos pasos**: contraseña + código OTP de 6 dígitos por
-  correo (10 minutos de vigencia), con bloqueo tras 5 intentos fallidos
-  (comparte el mismo contador para contraseña y OTP) y reseteo de contraseña
-  por enlace de un solo uso.
+- **Autenticación**: correo + contraseña, con bloqueo tras 5 intentos
+  fallidos y reseteo de contraseña por enlace de un solo uso.
 - **Roles**: `admin` (sube archivos, corre el pipeline, cambia metas/pedidos,
   invita colaboradores) y `viewer` (solo lectura de dashboards y reportes) —
   aplicado tanto en la interfaz como en el backend (cada endpoint de

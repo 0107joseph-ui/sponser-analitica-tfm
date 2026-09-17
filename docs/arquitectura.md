@@ -52,10 +52,8 @@ estático. La contrapartida es que React/ReactDOM/Babel se cargan desde
 
 ## Seguridad
 
-- **Autenticación en dos pasos**: contraseña + OTP de 6 dígitos por correo,
-  con un solo contador de intentos fallidos compartido entre ambos factores
-  (`Usuario.intentos_fallidos`/`bloqueado_hasta`) -- evita que alguien evada
-  el bloqueo probando contraseñas y, por separado, códigos OTP.
+- **Autenticación**: correo + contraseña, con bloqueo tras 5 intentos
+  fallidos (`Usuario.intentos_fallidos`/`bloqueado_hasta`).
 - **Roles a nivel de endpoint, no solo de interfaz**: cada ruta de escritura
   (`POST`/`PUT`/`DELETE`) depende de `security.requiere_admin`, que se
   ejecuta en el backend independientemente de lo que la interfaz permita

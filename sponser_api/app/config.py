@@ -74,12 +74,6 @@ SMTP_FROM = os.environ.get("SPONSER_API_SMTP_FROM", SMTP_USER or "no-responder@s
 SMTP_USE_TLS = os.environ.get("SPONSER_API_SMTP_USE_TLS", "true").lower() != "false"
 SMTP_TIMEOUT_SEGUNDOS = int(os.environ.get("SPONSER_API_SMTP_TIMEOUT", "10"))
 
-# Verificación en dos pasos (OTP por correo, obligatoria en cada login).
-OTP_LARGO = 6
-OTP_EXPIRA_MINUTOS = 10
-OTP_REENVIO_COOLDOWN_SEGUNDOS = 30
-OTP_MAX_REENVIOS = 3  # por ciclo de login; se reinicia con cada password OK
-
 # Restablecimiento de contraseña por enlace de un solo uso.
 RESET_TOKEN_EXPIRA_MINUTOS = 30
 PASSWORD_MIN_LARGO = 8
