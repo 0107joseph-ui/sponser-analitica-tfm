@@ -416,12 +416,14 @@ componente:
   "hurdle", features, metodología de validación, y una tabla comparativa
   de las 8 versiones del modelo entrenadas durante el desarrollo con sus
   métricas reales.
-- [`docs/memoria/memoria.html`](docs/memoria/memoria.html): la memoria
-  del TFM (documento formal, orientado a negocio, con el análisis
-  descriptivo, la metodología de modelado y las conclusiones). Abrir en el
-  navegador e imprimir a PDF para la entrega. **Pendiente de completar**:
-  la sección de bibliografía debe ampliarse con las referencias
-  específicas del máster.
+- [`docs/memoria/memoria.pdf`](docs/memoria/memoria.pdf): la memoria del
+  TFM lista para entregar (documento formal, orientado a negocio, con el
+  análisis descriptivo, la metodología de modelado y las conclusiones; 16
+  páginas de contenido, dentro del límite de 20). Generada desde
+  [`docs/memoria/memoria.html`](docs/memoria/memoria.html), que se puede
+  volver a abrir y exportar si hace falta ajustar algo. **Pendiente de
+  completar**: la sección de bibliografía debe ampliarse con las
+  referencias específicas del máster.
 
 ## Licencia
 
