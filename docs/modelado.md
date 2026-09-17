@@ -35,7 +35,7 @@ el futuro):
 | Calendario | día del mes, semana del año, trimestre, fin de semana, día de la semana |
 | Eventos (`eventos.csv`) | ¿hay evento activo?, días hasta el próximo, días desde el anterior, tipo de evento |
 | Rezagos | `lag_1, lag_2, lag_3, lag_7, lag_14, lag_28` |
-| Ventanas móviles | media y desviación estándar a 7/28/90 días |
+| Ventanas móviles | media a 7/28/90 días, desviación estándar a 7 días |
 | Histórico | promedio histórico del producto, código de producto codificado |
 
 ## Entrenamiento y validación (`train.py`)

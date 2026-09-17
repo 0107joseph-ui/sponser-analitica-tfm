@@ -62,7 +62,7 @@ def _ejecutar(corrida_id: int) -> None:
         corrida = db.get(models_db.CorridaPipeline, corrida_id)
         pasos = [
             ("ETL (extract/transform/load)", config.PIPELINE_SCRIPT),
-            ("Pronóstico de demanda (modelo v7)", config.FORECAST_SCRIPT),
+            ("Pronóstico de demanda", config.FORECAST_SCRIPT),
             ("Recomendación de compra", config.REPLENISHMENT_SCRIPT),
         ]
         for nombre, script in pasos:

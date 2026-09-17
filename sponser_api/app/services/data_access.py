@@ -587,8 +587,8 @@ def _build_articulos_rezagados_impl(as_of: date) -> list[dict]:
 
 
 def build_model_accuracy() -> dict:
-    """Precisión real del modelo v7 (backtest, no una simulación) -- reemplaza la
-    tabla 'real vs. proyectado' que en el mock usaba factores de ruido inventados.
+    """Precisión real del modelo vigente (LATEST.txt), del backtest, no de una
+    simulación.
 
     `pct_total_real_backtest` de versions/summary.csv es qué tan cerca quedó el
     pronóstico total de la venta real agregada en el backtest (la métrica que sí

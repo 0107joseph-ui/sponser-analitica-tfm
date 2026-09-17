@@ -419,11 +419,10 @@ componente:
 - [`docs/memoria/memoria.pdf`](docs/memoria/memoria.pdf): la memoria del
   TFM lista para entregar (documento formal, orientado a negocio, con el
   análisis descriptivo, la metodología de modelado y las conclusiones; 16
-  páginas de contenido, dentro del límite de 20). Generada desde
-  [`docs/memoria/memoria.html`](docs/memoria/memoria.html), que se puede
-  volver a abrir y exportar si hace falta ajustar algo. **Pendiente de
-  completar**: la sección de bibliografía debe ampliarse con las
-  referencias específicas del máster.
+  páginas de contenido, dentro del límite de 20, más un anexo con el
+  código fuente completo del pipeline que no cuenta para ese límite).
+  Generada desde [`docs/memoria/memoria.html`](docs/memoria/memoria.html),
+  que se puede volver a abrir y exportar si hace falta ajustar algo.
 
 ## Licencia
 

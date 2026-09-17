@@ -852,7 +852,7 @@
 
         <div class="card elev-sm">
           <span class="card-kicker">Modelo de forecasting</span>
-          <span class="card-title">Modelo v7 · demanda diaria (clasificación + regresión Poisson)</span>
+          <span class="card-title">Modelo {{ modelVersion }} · demanda diaria (clasificación + regresión Poisson)</span>
           <p class="card-body">Al actualizar, se vuelve a correr el pronóstico recursivo del modelo entrenado sobre las ventas más recientes y se recalcula la recomendación de compra.</p>
           <div style="display:flex;gap:var(--space-6);padding:var(--space-3) 0;border-top:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider);margin:var(--space-2) 0">
             <div>
@@ -2421,9 +2421,9 @@ class Component extends DCLogic {
   }
 
   // El pronóstico (forecastMonths) y la sugerencia de pedido (suggested) ya
-  // vienen calculados por el modelo real (v7) desde el backend -- acá solo se
-  // preserva la tendencia histórica (avgGrowth, para narrativa/tags) y el
-  // ajuste manual del usuario sobre el pronóstico real (adjPct).
+  // vienen calculados por el modelo desde el backend -- acá solo se preserva
+  // la tendencia histórica (avgGrowth, para narrativa/tags) y el ajuste
+  // manual del usuario sobre el pronóstico real (adjPct).
   computeForecast(sku) {
     const { n } = this.ytd();
     const sales = sku.sales.slice(0, n);
@@ -3303,8 +3303,7 @@ class Component extends DCLogic {
     this.state.products.forEach(p => { forecastsById[p.id] = this.computeForecast(p); });
     const riskCount = this.state.products.filter(p => forecastsById[p.id].monthsCover < 1.2).length;
 
-    // Precisión real del modelo v7 (backtest, ver services/data_access.py::build_model_accuracy
-    // del backend) -- no una simulación con factores de ruido inventados.
+    // Precisión real del modelo vigente (backtest, ver data_access.py::build_model_accuracy).
     const modelAcc = S.modelAccuracy || { version: '', accuracyPct: 0, topSkus: [] };
     const accuracy = modelAcc.accuracyPct;
     const comparisonData = modelAcc.topSkus.map(row => ({
