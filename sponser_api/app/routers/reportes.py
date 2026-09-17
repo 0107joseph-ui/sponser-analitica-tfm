@@ -1,3 +1,6 @@
+"""Reportes exportables en CSV: priorización de salida, concentración
+80/20, artículos rezagados y clientes inactivos."""
+
 from __future__ import annotations
 
 import io

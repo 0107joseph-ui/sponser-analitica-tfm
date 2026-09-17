@@ -1,3 +1,6 @@
+"""Autenticación (hash y verificación de contraseña, bloqueo por intentos
+fallidos), sesión, roles, y restablecimiento de contraseña por enlace."""
+
 from __future__ import annotations
 
 import datetime as dt

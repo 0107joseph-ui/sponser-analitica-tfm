@@ -1,3 +1,6 @@
+"""Punto de entrada de la app: instancia FastAPI, middlewares (sesión, CORS)
+y registro de routers. Arrancar con `uvicorn app.main:app`."""
+
 from __future__ import annotations
 
 from fastapi import FastAPI

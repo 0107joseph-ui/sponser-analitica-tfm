@@ -1,3 +1,6 @@
+"""Endpoints de "Pedido a fábrica": pedidos en tránsito, patrocinios
+previstos, cantidad final por línea, y confirmación del pedido."""
+
 from __future__ import annotations
 
 import datetime as dt

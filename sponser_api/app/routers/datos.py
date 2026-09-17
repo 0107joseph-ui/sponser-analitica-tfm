@@ -1,3 +1,6 @@
+"""Endpoints de "Carga de datos": meta anual, bitácora, subida de archivos
+de ventas/inventario, y disparo del pipeline completo."""
+
 from __future__ import annotations
 
 import datetime as dt

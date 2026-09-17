@@ -16,9 +16,13 @@ El inventario (`Inventario*.xlsx`) sí es un `.xlsx` genuino, leído
 directamente con `pandas.read_excel`.
 
 Cada archivo de ventas se identifica por nombre (`COM|Control Sponser
-AAAA.xls`) para etiquetar la fuente y el año; un archivo con encabezados
-distintos a los esperados se omite con una advertencia en vez de tumbar
-todo el proceso (`ResultadoExtraccion.errores`).
+AAAA.xls`) para etiquetar la fuente y el año. La validación de encabezado
+es por nombre de columna, no por posición exacta: el sistema fuente agregó
+una columna nueva ("Marca") en algún momento entre los reportes de
+2023-2025 y los actuales, así que exigir una lista fija habría rechazado
+los archivos recientes. Un archivo al que le falte alguna de las columnas
+que sí se necesitan se omite con una advertencia en vez de tumbar todo el
+proceso (`ResultadoExtraccion.errores`).
 
 ## 2. Transformación (`transform.py`)
 
@@ -78,7 +82,9 @@ nombre contra los mismos patrones que espera `extract.py`
 - **Ventas**: cada año es un archivo con nombre fijo
   (`COM Sponser 2026.xls`) -- subir el mismo año otra vez lo reemplaza (es
   una corrección/actualización de ese año), subir un año nuevo se acumula
-  junto a los anteriores.
+  junto a los anteriores. También se acepta el nombre real que exporta el
+  sistema de Sponser ("Ventas COM ene - sep 2026.xls", "Ventas CON ene -
+  sep 2026.xls"), normalizado al nombre canónico de arriba.
 - **Inventario**: siempre se guarda bajo un nombre fijo
   (`Inventario.xlsx`), reemplazando cualquier subida anterior. Es
   deliberado: `extract_inventario` toma el primer archivo que encuentre con

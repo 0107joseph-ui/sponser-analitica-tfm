@@ -1,3 +1,6 @@
+"""Esquemas Pydantic de entrada/salida de la API (login, productos,
+clientes, pedidos, metas, bitácora, usuarios)."""
+
 from __future__ import annotations
 
 import datetime as dt

@@ -1,3 +1,6 @@
+"""Modelos SQLAlchemy: usuarios, metas de venta, bitácora de corridas del
+pipeline, y pedidos (tránsito, patrocinios previstos, confirmados)."""
+
 from __future__ import annotations
 
 import datetime as dt

@@ -1,3 +1,7 @@
+"""Endpoint principal del dashboard: productos, clientes, líneas
+comerciales, patrocinios y precisión del modelo, todo en una sola
+respuesta que el frontend pide al cargar la sesión."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException

@@ -1,13 +1,13 @@
 # Sponser Analítica
 
-Sistema de analítica comercial, pronóstico de demanda y reabastecimiento para
-**Sponser Costa Rica** (distribuidor de nutrición deportiva) — pipeline de
-datos, modelo de pronóstico y dashboard interactivo.
+Sistema de analítica comercial, pronóstico de demanda y reabastecimiento
+para **Sponser Costa Rica** (distribuidor de nutrición deportiva). Incluye
+pipeline de datos, modelo de pronóstico y dashboard interactivo.
 
-> **Trabajo final de graduación — Maestría en Data Science**
+> **Trabajo Fin de Máster**
 > - Autor: Joseph Alejandro Mora Murillo
-> - Máster Data Science, Big Data & Business Analytics 2025-2026 (Semi-presencial)
-> - Universidad Complutense de Madrid UCM (NTIC)
+> - Máster en Data Science, Big Data & Business Analytics 2025-2026 (semipresencial)
+> - Universidad Complutense de Madrid (UCM), Instituto NTIC
 > 
 > Este repositorio incluye el código completo **y los datos reales** del
 > cliente (autorizados para este trabajo académico) para que el pipeline, el
@@ -47,9 +47,9 @@ distribuidores y tiendas. La operación enfrentaba tres problemas concretos:
 
 Este proyecto resuelve los tres con un pipeline de datos que limpia y agrega
 las ventas/inventario reales, un modelo de pronóstico de demanda diaria por
-producto, una simulación de reabastecimiento FIFO consciente de vencimientos,
-y un dashboard donde el equipo comercial carga los datos, corre el modelo y
-analiza los resultados.
+producto, una simulación de reabastecimiento FIFO que respeta el orden de
+vencimiento, y un dashboard donde el equipo comercial carga los datos,
+corre el modelo y analiza los resultados.
 
 ## Arquitectura
 
@@ -161,17 +161,16 @@ docker compose up --build
 ```
 
 Levanta el backend (con `sponser_etl` ya incluido para el pipeline) en
-`http://localhost:8000` y el frontend en `http://localhost:5500` — abrir
+`http://localhost:8000` y el frontend en `http://localhost:5500`. Abrir
 `http://localhost:5500/Sponser%20Analitica%20v2%20Ilustrada.dc.html`. La
 base de datos persiste en un volumen con nombre entre reinicios
 (`docker compose down -v` para empezar de cero). Variables de entorno como
 `SPONSER_API_SECRET_KEY` se pueden fijar en la shell antes de levantar los
 contenedores; ver el resto de esta sección para qué hace cada una.
 
-> No pude probar esta ruta con un `docker build`/`docker compose up` real
-> en el entorno donde armé este repositorio (no tenía Docker disponible) --
-> revisado con cuidado línea por línea, pero si algo falla al construir la
-> imagen, es el primer lugar donde mirar.
+> Probado con `docker compose up --build` real, login, subida de archivos
+> y corrida completa del pipeline (ETL + modelo + reabastecimiento) dentro
+> del contenedor.
 
 ### Opción B: entorno virtual manual
 
@@ -230,8 +229,8 @@ Abrir `http://localhost:5500/Sponser%20Analitica%20v2%20Ilustrada.dc.html`.
 | `m.jimenez@sponser.cr` | `sponser2026` | Administrador |
 
 El login es de un solo paso (correo + contraseña, sin verificación
-adicional). Desde la pestaña "Carga de datos", el administrador puede invitar más
-usuarios con rol de administrador o de solo lectura (ver
+adicional). Desde la pestaña "Carga de datos", el administrador puede
+invitar más usuarios con rol de administrador o de solo lectura (ver
 [Manejo de entorno y seguridad](#manejo-de-entorno-y-seguridad)).
 
 ## El pipeline de datos
@@ -239,17 +238,17 @@ usuarios con rol de administrador o de solo lectura (ver
 `sponser_etl/pipeline.py` orquesta tres pasos, cada uno un módulo
 independiente y testeable por separado:
 
-1. **`extract.py`** — Los reportes de venta ("COM Sponser AAAA.xls",
-   "Control Sponser AAAA.xls") no son binarios Excel: son HTML (una tabla
+1. **`extract.py`**: los reportes de venta ("COM Sponser AAAA.xls",
+   "Control Sponser AAAA.xls") no son binarios Excel, son HTML (una tabla
    `GridView` de ASP.NET exportada con extensión `.xls`). Se parsean con
    `html.parser` de la librería estándar. El inventario sí es un `.xlsx`
    genuino, leído con `pandas.read_excel`.
-2. **`transform.py`** — Limpieza y unificación: conversión de colones a
+2. **`transform.py`**: limpieza y unificación. Conversión de colones a
    dólares, separación de patrocinios (salidas de inventario que no son
    venta) del resto de las ventas orgánicas, y construcción de las tablas
    agregadas: ventas diarias por producto, RFM de clientes, lotes de
    inventario con fecha de vencimiento.
-3. **`load.py`** — Escribe cada tabla a `data/processed/*.csv`.
+3. **`load.py`**: escribe cada tabla a `data/processed/*.csv`.
 
 El backend nunca corre estos scripts como librería importada: los dispara
 como subproceso (`pipeline_runner.py`) desde el botón "Actualizar" del
@@ -268,16 +267,16 @@ dashboard, y registra el resultado en una bitácora auditable
   final combina ambos: `E[demanda] = P(venta) × E[cantidad | venta]`.
 - **Features** (`features.py`): calendario (día del mes, semana del año,
   trimestre, fin de semana), eventos (carreras, promociones, días hasta/desde
-  el evento más cercano — `eventos.csv`), rezagos (`lag_1/2/3/7/14/28`),
+  el evento más cercano, `eventos.csv`), rezagos (`lag_1/2/3/7/14/28`),
   medias y desviación móvil (`rolling_mean/std` a 7/28/90 días), y el
   histórico promedio del producto.
 - **Entrenamiento** (`train.py`): split temporal (los últimos 150 días como
   validación, nunca aleatorio, para no filtrar información del futuro).
   Cada corrida crea una versión nueva en `modeling/versions/vN/` sin
-  sobreescribir las anteriores — este repositorio incluye las 8 versiones
+  sobreescribir las anteriores. Este repositorio incluye las 8 versiones
   entrenadas durante el desarrollo del modelo, con sus métricas y backtests.
 - **Pronóstico** (`forecast.py`): recursivo día a día hasta 100 días hacia
-  adelante — cada predicción se encadena como insumo (rezago/rolling) del
+  adelante. Cada predicción se encadena como insumo (rezago/rolling) del
   día siguiente, usando el modelo ya entrenado.
 - **Validación** (`backtest.py`): compara el pronóstico recursivo contra
   ventas reales ya ocurridas (excluidas del entrenamiento), producto por
@@ -296,7 +295,7 @@ dashboard.
 
 ## El dashboard
 
-`sponser_api/frontend_src/Sponser Analitica v2 Ilustrada.dc.html` — sin
+`sponser_api/frontend_src/Sponser Analitica v2 Ilustrada.dc.html`: sin
 build step, JavaScript plano sobre un pequeño framework de plantillas
 (`support.js`). Pestañas:
 
@@ -304,7 +303,7 @@ build step, JavaScript plano sobre un pequeño framework de plantillas
   ventas, alerta de excedente de inventario en riesgo de vencer (inventario
   menos lo que el ritmo de venta actual va a consumir antes de esa fecha).
 - **Análisis comercial**: ranking de clientes, líneas comerciales,
-  concentración de ventas (Pareto 80/20), clientes inactivos — con filtro de
+  concentración de ventas (Pareto 80/20), clientes inactivos, con filtro de
   año para comparar 2023-2026.
 - **Proyección**: pronóstico a 3/6/12 meses por SKU, con ajuste manual y
   comparación contra el backtest del modelo.
@@ -326,12 +325,12 @@ build step, JavaScript plano sobre un pequeño framework de plantillas
 - **Autenticación**: correo + contraseña, con bloqueo tras 5 intentos
   fallidos y reseteo de contraseña por enlace de un solo uso.
 - **Roles**: `admin` (sube archivos, corre el pipeline, cambia metas/pedidos,
-  invita colaboradores) y `viewer` (solo lectura de dashboards y reportes) —
+  invita colaboradores) y `viewer` (solo lectura de dashboards y reportes),
   aplicado tanto en la interfaz como en el backend (cada endpoint de
   escritura verifica el rol, no solo la sesión).
 - **Capas de consulta**: `data_access.py` separa la lectura cacheada de CSV
   crudos (invalidada cuando cambia el archivo en disco) de los cálculos
-  agregados sobre esos datos (invalidados solo cuando corre el pipeline) —
+  agregados sobre esos datos (invalidados solo cuando corre el pipeline),
   para no recalcular lo mismo en cada request.
 
 ## Diccionario de datos
@@ -390,6 +389,16 @@ docker compose exec backend bash -c "cd ../sponser_etl && python pipeline.py"
   al abrir la página (ver [Arrancar el frontend](#3-arrancar-el-frontend)).
   Una versión totalmente offline requeriría empaquetar esas librerías junto
   al repositorio en vez de cargarlas por CDN.
+- **Errores de consola durante la carga inicial**: el navegador interpreta
+  el HTML del archivo `.dc.html` antes de que el framework de plantillas
+  (`support.js` + React, cargados desde `unpkg.com`) reemplace los
+  `{{ }}` por sus valores reales, así que durante esa fracción de segundo
+  aparecen advertencias de atributos SVG inválidos en la consola. Se
+  verificó con pruebas automatizadas que ocurren únicamente antes de que
+  la página termine de cargar (nunca durante el uso normal: login, cambio
+  de pestañas, etc.) y no tienen efecto visible ni funcional. Corregirlo de
+  raíz implicaría modificar `support.js`, que es el runtime del framework
+  de plantillas y no código propio de este proyecto.
 
 ## Documentación adicional
 
@@ -397,17 +406,17 @@ Este README cubre lo necesario para instalar, correr y entender el
 proyecto de punta a punta. Para el detalle técnico más profundo de cada
 componente:
 
-- [`docs/arquitectura.md`](docs/arquitectura.md) — decisiones de diseño
+- [`docs/arquitectura.md`](docs/arquitectura.md): decisiones de diseño
   (por qué `sponser_api` nunca importa `sponser_etl`, las dos capas de
   caché del backend, seguridad).
-- [`docs/pipeline_datos.md`](docs/pipeline_datos.md) — extracción,
+- [`docs/pipeline_datos.md`](docs/pipeline_datos.md): extracción,
   transformación y carga paso a paso, incluyendo el formato real (no
   Excel) de los reportes de venta.
-- [`docs/modelado.md`](docs/modelado.md) — por qué una arquitectura
+- [`docs/modelado.md`](docs/modelado.md): por qué una arquitectura
   "hurdle", features, metodología de validación, y una tabla comparativa
   de las 8 versiones del modelo entrenadas durante el desarrollo con sus
   métricas reales.
-- [`docs/memoria/memoria.html`](docs/memoria/memoria.html) — la memoria
+- [`docs/memoria/memoria.html`](docs/memoria/memoria.html): la memoria
   del TFM (documento formal, orientado a negocio, con el análisis
   descriptivo, la metodología de modelado y las conclusiones). Abrir en el
   navegador e imprimir a PDF para la entrega. **Pendiente de completar**:
@@ -416,6 +425,6 @@ componente:
 
 ## Licencia
 
-Ver [`LICENSE.md`](LICENSE.md) — este repositorio incluye datos comerciales
+Ver [`LICENSE.md`](LICENSE.md). Este repositorio incluye datos comerciales
 reales de un cliente, autorizados exclusivamente para esta evaluación
 académica; no es software ni datos de uso libre.

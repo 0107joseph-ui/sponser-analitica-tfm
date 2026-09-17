@@ -1,3 +1,6 @@
+"""Endpoints de sesión: login, logout, "quién soy", y restablecimiento de
+contraseña por enlace de un solo uso."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request

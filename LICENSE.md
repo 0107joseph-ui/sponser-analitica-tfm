@@ -1,7 +1,8 @@
 # Licencia y uso de este repositorio
 
-Este repositorio se entrega como parte de un **trabajo final de graduación
-académico** (Maestría en Data Science). No es software de código abierto.
+Este repositorio se entrega como parte de un **Trabajo Fin de Máster**
+(Máster en Data Science, Big Data & Business Analytics, UCM). No es
+software de código abierto.
 
 - El **código** (`sponser_etl/`, `sponser_api/`) fue desarrollado por el
   autor para este trabajo y puede consultarse con fines de evaluación

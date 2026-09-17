@@ -1,3 +1,5 @@
+"""Motor y sesión de SQLAlchemy (SQLite), y arranque/migración de la base."""
+
 from __future__ import annotations
 
 import os

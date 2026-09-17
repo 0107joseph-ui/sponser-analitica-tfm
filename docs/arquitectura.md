@@ -37,7 +37,7 @@ mismo en cada request sin arriesgar servir datos desactualizados:
   exitosa del pipeline -- no en cada request.
 
 Así, abrir una pestaña del dashboard o cambiar un filtro nunca dispara un
-recálculo de todo lo agregado; sólo lee lo ya cacheado, a menos que haya
+recálculo de todo lo agregado; solo lee lo ya cacheado, a menos que haya
 datos nuevos.
 
 ## Frontend: por qué sin build step

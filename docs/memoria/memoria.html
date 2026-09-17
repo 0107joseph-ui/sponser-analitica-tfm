@@ -63,10 +63,10 @@
   <div class="subtitulo">Pipeline de datos, pronóstico de demanda y reabastecimiento<br>productivizados para un distribuidor de nutrición deportiva</div>
   <table>
     <tr><td>Trabajo Fin de Máster</td><td>Máster Data Science, Big Data &amp; Business Analytics 2025-2026 (Semi-presencial)</td></tr>
-    <tr><td>Universidad</td><td>Universidad Complutense de Madrid (UCM — NTIC)</td></tr>
+    <tr><td>Universidad</td><td>Universidad Complutense de Madrid (UCM), Instituto NTIC</td></tr>
     <tr><td>Autor</td><td>Joseph Alejandro Mora Murillo</td></tr>
     <tr><td>Tutores</td><td>Carlos Ortega, Santiago Mota</td></tr>
-    <tr><td>Repositorio</td><td>https://github.com/0107joseph-ui/sponser-analitica-tfm (privado — tutores con acceso)</td></tr>
+    <tr><td>Repositorio</td><td>https://github.com/0107joseph-ui/sponser-analitica-tfm (privado, tutores con acceso)</td></tr>
   </table>
 </div>
 
@@ -104,9 +104,9 @@ extremo a extremo: un pipeline de datos que limpia y agrega la información
 comercial, un modelo de pronóstico de demanda diaria por producto (LightGBM,
 arquitectura de dos etapas), una simulación de reabastecimiento consciente
 de vencimientos (FIFO), y una aplicación web donde el equipo comercial carga
-los datos actualizados, corre el modelo y analiza los resultados —
-cumpliendo el criterio de productivización de un modelo predictivo: recibe
-datos nuevos y devuelve una recomendación de compra accionable.
+los datos actualizados, corre el modelo y analiza los resultados. Esto
+cumple el criterio de productivización de un modelo predictivo: recibe
+datos nuevos y devuelve una recomendación de compra lista para usar.
 </p>
 <div class="caja">
 <strong>Cifras clave:</strong> 10.929 líneas de venta reales (abr. 2023 – may.
@@ -133,7 +133,7 @@ unidades, al ritmo de venta real, no se iban a consumir antes de vencer.</li>
 </ul>
 <p>
 El objetivo del proyecto es doble: (a) demostrar un desarrollo analítico
-completo — descriptivo, predictivo y de decisión — sobre un problema de
+completo (descriptivo, predictivo y de decisión) sobre un problema de
 negocio real, y (b) entregar una herramienta que el equipo comercial de
 Sponser use de forma continua, no un análisis de una sola vez.
 </p>
@@ -161,7 +161,7 @@ procesada) en el README del repositorio, sección "Diccionario de datos".</p>
 <p>
 La solución se divide en dos componentes independientes que se comunican
 solo a través de archivos y ejecución de subprocesos, nunca por importación
-de código — así el pipeline de datos y el backend pueden evolucionar sin
+de código. Así, el pipeline de datos y el backend pueden evolucionar sin
 arriesgarse mutuamente:
 </p>
 <ul>
@@ -195,9 +195,9 @@ Se normaliza la moneda (un 0.04% de las filas viene en colones y se
 convierte a USD), se separan las salidas de inventario por patrocinio
 deportivo del resto de la venta comercial (no son venta orgánica y
 sesgarían el modelo si se incluyeran), y se calcula la venta neta restando
-el IVA del monto bruto facturado — verificado empíricamente contra ambas
-fuentes de reporte (99.9% de coincidencia con la identidad contable
-esperada).
+el IVA del monto bruto facturado. Esto último se verificó empíricamente
+contra ambas fuentes de reporte, con 99.9% de coincidencia con la
+identidad contable esperada.
 </p>
 <h3>5.3 Carga</h3>
 <p>
@@ -219,7 +219,7 @@ con una demanda ligada a temporadas deportivas y patrocinios de eventos:
 </p>
 <figure>
   <img src="figuras/01_ventas_mensuales.png" alt="Facturación mensual">
-  <figcaption>Figura 1 — Facturación mensual de ventas orgánicas (excluye patrocinios), abril 2023 – mayo 2026.</figcaption>
+  <figcaption>Figura 1. Facturación mensual de ventas orgánicas (excluye patrocinios), abril 2023 a mayo 2026.</figcaption>
 </figure>
 
 <p>
@@ -230,29 +230,30 @@ subconjunto sin descuidar el resto del catálogo:
 </p>
 <figure>
   <img src="figuras/02_top_productos.png" alt="Top productos">
-  <figcaption>Figura 2 — Los 15 SKUs de mayor facturación acumulada.</figcaption>
+  <figcaption>Figura 2. Los 15 SKUs de mayor facturación acumulada.</figcaption>
 </figure>
 
 <p>
 Lo mismo ocurre del lado de clientes: el <strong>23% de la cartera
-concentra el 80% de la facturación</strong> — un patrón de Pareto clásico
+concentra el 80% de la facturación</strong>, un patrón de Pareto clásico
 que tiene implicaciones directas de negocio (priorización de cuentas clave,
 gestión de riesgo de concentración):
 </p>
 <figure>
   <img src="figuras/03_pareto_clientes.png" alt="Concentración de clientes">
-  <figcaption>Figura 3 — Curva de concentración de clientes por facturación acumulada.</figcaption>
+  <figcaption>Figura 3. Curva de concentración de clientes por facturación acumulada.</figcaption>
 </figure>
 
 <p>
 Del lado de inventario, la distribución de lotes por meses restantes hasta
 vencer muestra que una porción del stock actual tiene una ventana de venta
-relativamente corta — la motivación directa del componente de
-reabastecimiento consciente de vencimientos (sección 8):
+relativamente corta. Esa es la motivación directa del componente de
+reabastecimiento que prioriza la salida del inventario más próximo a vencer
+(sección 8):
 </p>
 <figure>
   <img src="figuras/04_inventario_vencimiento.png" alt="Inventario por vencimiento">
-  <figcaption>Figura 4 — Distribución de lotes de inventario según meses restantes hasta la fecha de vencimiento.</figcaption>
+  <figcaption>Figura 4. Distribución de lotes de inventario según meses restantes hasta la fecha de vencimiento.</figcaption>
 </figure>
 
 <h2 class="seccion">7. Modelado predictivo de demanda</h2>
@@ -267,9 +268,9 @@ LightGBM con objetivo Tweedie (pensado para variables con exceso de ceros);
 a partir de v5 se cambió a una arquitectura de dos etapas:
 </p>
 <ol>
-<li><strong>Clasificación</strong> — ¿hay venta ese producto ese día?
+<li><strong>Clasificación</strong>: ¿hay venta ese producto ese día?
 (LightGBM binario, AUC = 0.90 en la versión vigente).</li>
-<li><strong>Regresión</strong> — dado que sí hay venta, ¿cuánto se vende?
+<li><strong>Regresión</strong>: dado que sí hay venta, ¿cuánto se vende?
 (LightGBM con objetivo Poisson, entrenado solo sobre filas con venta
 positiva).</li>
 </ol>
@@ -283,7 +284,7 @@ las dos a la vez.
 Calendario (día del mes, semana del año, trimestre, fin de semana),
 eventos (días hasta/desde el evento más cercano), rezagos (1, 2, 3, 7, 14 y
 28 días), medias y desviación móvil (7/28/90 días), e histórico promedio
-del producto — 21 variables en total.
+del producto. En total, 21 variables.
 </p>
 <h3>7.3 Validación y resultados</h3>
 <p>
@@ -294,7 +295,7 @@ ocurridas pero excluidas del entrenamiento:
 </p>
 <figure>
   <img src="figuras/05_backtest_real_vs_pronosticado.png" alt="Backtest real vs pronosticado">
-  <figcaption>Figura 5 — Backtest de la versión vigente (v8): unidades reales vs. pronosticadas, agregado mensual de todos los SKUs.</figcaption>
+  <figcaption>Figura 5. Backtest de la versión vigente (v8): unidades reales vs. pronosticadas, agregado mensual de todos los SKUs.</figcaption>
 </figure>
 <table class="datos">
 <tr><th>Métrica</th><th>Valor (v8)</th><th>Lectura de negocio</th></tr>
@@ -304,8 +305,8 @@ ocurridas pero excluidas del entrenamiento:
 </table>
 <p>
 Se entrenaron y compararon 8 versiones del modelo durante el desarrollo,
-documentadas con sus métricas completas en el repositorio — la versión v8
-mejora notablemente el error absoluto medio sobre las versiones anteriores
+documentadas con sus métricas completas en el repositorio. La versión v8
+mejora notablemente el error absoluto medio sobre las versiones anteriores,
 sin sacrificar la precisión agregada de volumen.
 </p>
 <p class="anexo-ref">Tabla comparativa completa de las 8 versiones,
@@ -325,8 +326,8 @@ empaque).
 El componente de reabastecimiento simula el consumo del inventario
 existente en orden estricto de vencimiento (FIFO: lo que vence primero se
 consume primero) contra la <strong>curva día a día</strong> del pronóstico
-del modelo — no un promedio aplanado, para no perder la estacionalidad que
-el modelo sí calculó — y solo sugiere pedir la demanda que el inventario
+del modelo, no un promedio aplanado, para no perder la estacionalidad que
+el modelo sí calculó. Solo sugiere pedir la demanda que el inventario
 actual, más lo ya negociado con el proveedor, no alcanza a cubrir dentro
 del horizonte de compra.
 </p>
@@ -343,7 +344,7 @@ horizonte de simulación y la asignación de ofertas de proveedor, en
 <h2 class="seccion">9. Productivización: la aplicación web</h2>
 <p>
 Más allá del análisis, el proyecto se entrega como una aplicación en
-producción que el equipo comercial usa de forma continua — cumpliendo el
+producción que el equipo comercial usa de forma continua. Esto cumple el
 criterio de que el modelo "reciba datos nuevos y devuelva una predicción"
 en un contexto real de negocio, no solo como notebook de análisis:
 </p>
@@ -373,9 +374,9 @@ Ambas etapas del modelo se auditaron por importancia de variable (ganancia
 de información acumulada en LightGBM). En la etapa de clasificación, el
 código de producto, la media móvil a 28 días y si el día es fin de semana
 son las variables más influyentes; en la de regresión, el código de
-producto y el rezago de 1 día dominan — resultados consistentes con la
-intuición de negocio (cada producto tiene su propio nivel base de demanda,
-y la venta reciente es el mejor predictor de la venta inmediata siguiente).
+producto y el rezago de 1 día dominan. Son resultados consistentes con la
+intuición de negocio: cada producto tiene su propio nivel base de demanda,
+y la venta reciente es el mejor predictor de la venta inmediata siguiente.
 </p>
 <h3>10.2 Limitaciones</h3>
 <ul>
@@ -386,7 +387,7 @@ el pronóstico diario aislado.</li>
 <li>SKUs nuevos o con poca historia dependen más del promedio general del
 catálogo que de un patrón propio aprendido.</li>
 <li>El calendario de eventos deportivos que alimenta al modelo se mantiene
-manualmente y hoy tiene cobertura limitada — su exactitud acota
+manualmente y hoy tiene cobertura limitada. Su exactitud acota
 directamente cuánto puede aprender el modelo sobre el efecto de eventos en
 la demanda.</li>
 <li>La base de datos operativa (SQLite) es apropiada para el volumen actual
@@ -405,10 +406,10 @@ técnica.
 </p>
 <p>
 El mayor impacto de negocio identificado no es el pronóstico en sí, sino la
-combinación de pronóstico + inventario por lote + vencimiento: es lo que
+combinación de pronóstico, inventario por lote y vencimiento: es lo que
 convierte una predicción estadística en una recomendación de compra
-accionable y auditable, con el riesgo de pérdida por vencimiento hecho
-explícito en vez de descubrirse después de que ocurre.
+concreta, con el riesgo de pérdida por vencimiento a la vista desde antes
+de que ocurra, no después.
 </p>
 <p><strong>Líneas de trabajo futuro:</strong></p>
 <ul>
@@ -436,13 +437,13 @@ Python</em>. Journal of Machine Learning Research, 12, 2825-2830.</li>
 Python</em>. Proceedings of the 9th Python in Science Conference.</li>
 <li>Croston, J. D. (1972). <em>Forecasting and Stock Control for
 Intermittent Demands</em>. Operational Research Quarterly, 23(3), 289-303.
-— referencia clásica sobre pronóstico de demanda intermitente, el mismo
+Referencia clásica sobre pronóstico de demanda intermitente, el mismo
 problema que motiva la arquitectura de dos etapas usada en este trabajo.</li>
 <li>Silver, E. A., Pyke, D. F., &amp; Thomas, D. J. (2016). <em>Inventory
-and Production Management in Supply Chains</em> (4th ed.). CRC Press. —
-referencia general sobre lead time, stock de seguridad y políticas de
+and Production Management in Supply Chains</em> (4th ed.). CRC Press.
+Referencia general sobre lead time, stock de seguridad y políticas de
 reabastecimiento.</li>
-<li>Ramírez-Vélez, S. (Ed.). FastAPI documentation. <a href="https://fastapi.tiangolo.com/">https://fastapi.tiangolo.com/</a></li>
+<li>FastAPI. Documentación oficial. <a href="https://fastapi.tiangolo.com/">https://fastapi.tiangolo.com/</a> (consultado en 2026).</li>
 </ul>
 <p class="anexo-ref">Nota: completar/ampliar esta bibliografía con las
 referencias específicas de los módulos del máster que respalden las
