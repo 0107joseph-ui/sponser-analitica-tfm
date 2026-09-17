@@ -88,13 +88,9 @@ def limpiar_ventas(ventas_raw: pd.DataFrame) -> pd.DataFrame:
     df["usuario"] = df["usuario"].astype(str).str.upper().str.strip()
     df["nombre_cliente"] = df["nombre_cliente"].astype(str).str.strip()
 
-    # El campo "Código" del reporte es un ID interno del sistema de facturación
-    # (se reutiliza entre productos distintos) y NO coincide con el código real
-    # de producto usado en el inventario. El código real de producto viene
-    # embebido al inicio de "item" (p.ej. "17504 Activator 200 Fruit Boost...").
-    # Se usa ese código como codigo_producto (clave para cruzar con inventario);
-    # para líneas que no son producto (servicios, alquileres) se conserva el
-    # código interno de factura como respaldo.
+    # El código de producto real va embebido al inicio de "item"
+    # (p.ej. "17504 Activator 200 Fruit Boost..."), no en "Código"
+    # (ID interno de facturación, no cruza con inventario).
     df["codigo_producto"] = df["item_descripcion"].astype(str).str.extract(r"^\s*(\d+)")[0]
     df["codigo_producto"] = df["codigo_producto"].fillna(df["codigo_interno_factura"])
 
@@ -109,13 +105,8 @@ def limpiar_ventas(ventas_raw: pd.DataFrame) -> pd.DataFrame:
     df.loc[es_colones, COLUMNAS_MONETARIAS] = df.loc[es_colones, COLUMNAS_MONETARIAS].div(TIPO_CAMBIO_USD)
     df["moneda"] = "USD"
 
-    # "monto_total" tal como viene del reporte incluye IVA (confirmado: monto_total
-    # ≈ monto_unitario*cantidad - descuento_linea + iva en ~99.9% de las filas). Todo
-    # el pipeline (agregados diarios, RFM de clientes, y cualquier reporte que sume
-    # "monto_total") debe trabajar con venta NETA, no con el monto cobrado al cliente
-    # incluyendo impuesto. Se resta acá, en la fuente, para que ningún consumidor
-    # aguas abajo tenga que acordarse de hacerlo. El bruto queda disponible aparte
-    # por si se necesita para conciliación contable.
+    # "monto_total" incluye IVA; el pipeline trabaja en venta neta, así que
+    # se resta acá una sola vez. El bruto queda aparte para conciliación.
     df["monto_total_bruto"] = df["monto_total"]
     df["monto_total"] = (df["monto_total"] - df["iva"].fillna(0)).round(2)
 

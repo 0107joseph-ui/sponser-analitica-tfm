@@ -8,7 +8,6 @@ Excel: son HTML (una tabla GridView de ASP.NET) exportado con extensión
 from __future__ import annotations
 
 import glob
-import html
 import os
 import re
 from dataclasses import dataclass, field
@@ -121,14 +120,8 @@ def extract_ventas(raw_dir: str) -> ResultadoExtraccion:
             if datos:
                 datos = datos[:-1]  # última fila = totales del reporte, no confiable
 
-            # Se valida por nombre de columna, no por posición exacta: el
-            # sistema fuente agregó una columna "Marca" en algún momento
-            # entre los reportes históricos (2023-2025, sin Marca) y los
-            # actuales (con Marca, entre Proveedor y Cantidad) -- exigir la
-            # lista exacta rechazaba los reportes nuevos, y armar el
-            # DataFrame por posición con una columna de más habría corrido
-            # todo lo que viene después de Marca una posición, mezclando
-            # Cantidad con Marca, montounitario con Cantidad, etc.
+            # Por nombre, no por posición: reportes recientes traen una
+            # columna "Marca" extra que los históricos no tienen.
             header_limpio = [h.strip() for h in header]
             faltantes = [c for c in COLUMNAS_VENTAS if c not in header_limpio]
             if faltantes:

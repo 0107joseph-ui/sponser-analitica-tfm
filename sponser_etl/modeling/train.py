@@ -1,17 +1,12 @@
 """Entrena el modelo de demanda diaria por producto.
 
-Uso: python train.py (desde sponser_etl/modeling/)
-Cada corrida crea una versión nueva en versions/vN/ (nunca sobreescribe una
-anterior) y actualiza versions/LATEST.txt para que apunte a ella.
-Split temporal: últimos DIAS_VALIDACION días como validación, el resto entrenamiento.
+Uso: python train.py (desde sponser_etl/modeling/). Cada corrida crea una
+versión nueva en versions/vN/ y actualiza versions/LATEST.txt. Split temporal:
+últimos DIAS_VALIDACION días como validación, el resto entrenamiento.
 
-TIPO_MODELO controla la arquitectura:
-  - "tweedie_directo": un solo LightGBM (objetivo Tweedie) prediciendo unidades
-    directamente, incluidos los muchos días sin venta. Es lo que usaron v1-v4.
-  - "hurdle": dos LightGBM — un clasificador binario P(hay venta) y un regresor
-    (Poisson) de cuánto se vende dado que sí hubo venta — pensado para que cada
-    etapa aprenda una sola pregunta en vez de las dos a la vez, dado que el panel
-    es mayormente ceros. La predicción final es P(venta) x E[cantidad | venta].
+TIPO_MODELO: "tweedie_directo" (un LightGBM prediciendo unidades directo,
+usado en v1-v4) o "hurdle" (clasificador P(hay venta) + regresor Poisson de
+cantidad dado que hubo venta; predicción final = P(venta) x E[cantidad|venta]).
 """
 
 from __future__ import annotations
@@ -59,11 +54,9 @@ def calibrar_via_backtest_recursivo(
     dias_actividad_reciente: int = DIAS_ACTIVIDAD_RECIENTE,
     n_terciles: int = 3,
 ) -> dict:
-    """Calibración por producto, calculada corriendo el MISMO pronóstico recursivo
-    que usa forecast.py/backtest.py sobre la ventana de validación (con el modelo
-    SIN calibrar), en vez de usar métricas de validación de un solo paso — así el
-    factor de corrección refleja el comportamiento real del pronóstico encadenado,
-    no una situación más fácil (con rezagos reales) que no se repite en producción."""
+    """Calibración por producto, corriendo el mismo pronóstico recursivo de
+    forecast.py/backtest.py sobre la ventana de validación (modelo sin
+    calibrar) en vez de usar métricas de un solo paso."""
     historial_train = ventas[ventas["fecha"] < cutoff].copy()
     print(f"\nCalculando calibración con un backtest recursivo interno "
           f"({dias} días, {cutoff.date()} -> {fecha_max.date()}, modelo sin calibrar)...")

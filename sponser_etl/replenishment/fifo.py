@@ -1,11 +1,5 @@
 """Simulación FIFO de consumo de inventario y asignación de ofertas de proveedor,
 priorizando siempre lo que vence más pronto, para minimizar pérdida por vencimiento.
-
-Adaptado del prototipo `Modelo Sponser` (sin la carga de datos demo): las funciones
-`ajustar_a_moq_y_multiple`, `rango_fechas` y `construir_horizonte` mantienen la
-misma lógica; `asignar_ofertas_a_residual` estaba inconclusa en el original y
-se completa aquí. `consumir_fifo_solo_inventario` recibe la curva de demanda
-día a día del pronóstico (no un promedio) -- ver su docstring.
 """
 
 from __future__ import annotations
@@ -41,15 +35,9 @@ def construir_horizonte(sku_inv: pd.DataFrame, sku_ofertas: pd.DataFrame, lt: in
 
 
 def consumir_fifo_solo_inventario(demanda_diaria: pd.Series, sku_inv: pd.DataFrame, start_date: date, end_date: date):
-    """demanda_diaria: serie indexada por fecha con la demanda esperada de cada
-    día del horizonte -- la curva día a día del pronóstico (estacionalidad,
-    eventos, tendencia), no un promedio único repetido en todos los días. Un
-    promedio aplanado le haría perder a esta simulación la capacidad de ver,
-    por ejemplo, un pico de demanda por un evento puntual dentro del horizonte,
-    que es justo lo que puede hacer que un lote alcance a venderse o no antes
-    de vencer. Ver replenishment/run.py para cómo se arma esta serie (curva
-    del modelo dentro de su horizonte pronosticado, promedio como respaldo
-    para los días del horizonte de compra que quedan más allá de esa curva)."""
+    """demanda_diaria: serie indexada por fecha con la curva día a día del
+    pronóstico (no un promedio aplanado, para no perder picos por evento que
+    puedan definir si un lote vence antes de venderse). Ver run.py."""
     fechas = list(rango_fechas(start_date, end_date))
     residual = pd.Series([float(demanda_diaria.get(f, 0.0)) for f in fechas], index=fechas, dtype=float)
     servido = pd.Series([0] * len(fechas), index=fechas, dtype=float)

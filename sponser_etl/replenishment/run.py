@@ -41,10 +41,7 @@ ADVERTENCIA - revisar antes de usar para decisiones de compra:
 
 def cargar_as_of_date():
     """Última fecha con venta real registrada -- misma ancla temporal que usa
-    sponser_api (data_access.get_as_of_date()) para todo el resto del tablero.
-    No usar la fecha real del sistema aquí: dejaría el horizonte de compra
-    (y el riesgo de vencimiento) desfasado varios meses respecto a lo que
-    muestran el catálogo y el detalle de producto."""
+    sponser_api (data_access.get_as_of_date()) para todo el resto del tablero."""
     ventas = pd.read_csv(
         os.path.join(PROCESSED_DIR, "ventas_diarias_producto.csv"), parse_dates=["fecha"]
     )
@@ -56,10 +53,8 @@ def cargar_inputs():
         os.path.join(PROCESSED_DIR, "demanda_promedio_sku.csv"), dtype={"codigo_producto": str}
     )
 
-    # Curva día a día del pronóstico (estacionalidad, eventos, tendencia) --
-    # demanda_promedio_sku.csv (arriba) es el promedio de esta misma curva,
-    # usado como respaldo para los días del horizonte de compra que caen más
-    # allá de lo pronosticado (ver construir_demanda_diaria).
+    # Curva día a día del pronóstico; demanda_promedio_sku.csv (arriba) es su
+    # promedio, usado como respaldo (ver construir_demanda_diaria).
     forecast = pd.read_csv(
         os.path.join(PROCESSED_DIR, "forecast_demanda_producto.csv"),
         dtype={"codigo_producto": str}, parse_dates=["fecha"],
@@ -104,12 +99,10 @@ def cargar_descripciones() -> pd.Series:
 
 
 def construir_demanda_diaria(daily_avg: float, curva: pd.Series | None, start, end) -> pd.Series:
-    """Serie día a día para el horizonte de compra completo: usa la curva
-    pronosticada por el modelo mientras haya un valor para esa fecha, y el
-    promedio (daily_avg) como respaldo para los días del horizonte que caen
-    más allá del último día pronosticado (el horizonte de compra puede
-    extenderse más que el pronóstico si el inventario o una oferta de
-    proveedor vencen más tarde -- ver fifo.construir_horizonte)."""
+    """Serie día a día del horizonte de compra: usa la curva pronosticada
+    donde exista, y daily_avg de respaldo para los días fuera de ese rango
+    (el horizonte puede extenderse más que el pronóstico -- ver
+    fifo.construir_horizonte)."""
     fechas = list(fifo.rango_fechas(start, end))
     if curva is None or curva.empty:
         return pd.Series([daily_avg] * len(fechas), index=fechas, dtype=float)

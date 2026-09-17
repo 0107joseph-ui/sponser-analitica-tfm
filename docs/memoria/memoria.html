@@ -50,6 +50,18 @@
   code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; font-size: 9.5pt; }
   .bib { font-size: 9.5pt; }
   .bib li { margin-bottom: 0.5em; }
+  .anexo-codigo h3 {
+    font-family: 'Courier New', Consolas, monospace; font-size: 10.5pt;
+    background: #f7ecec; padding: 4px 8px; margin-top: 1.6em;
+    page-break-after: avoid;
+  }
+  .anexo-codigo p.ruta { font-size: 9pt; color: #666; margin: 2px 0 8px; }
+  pre.codigo {
+    background: #f7f7f7; border: 1px solid #e0e0e0; border-radius: 3px;
+    padding: 0.7em 0.9em; font-family: 'Courier New', Consolas, monospace;
+    font-size: 7.6pt; line-height: 1.35; white-space: pre-wrap;
+    word-wrap: break-word; margin: 0 0 1.4em;
+  }
   @media print {
     body { padding: 0; }
     a { color: inherit; }
@@ -85,8 +97,9 @@
     <li>Discusión: interpretabilidad y limitaciones</li>
     <li>Conclusiones y trabajo futuro</li>
     <li>Bibliografía y referencias</li>
+    <li>Anexo: código fuente del pipeline (ETL, modelado, reabastecimiento)</li>
   </ol>
-  <p class="anexo-ref">Anexo (no cuenta para el límite de extensión): código fuente completo, y documentación técnica ampliada en <code>docs/arquitectura.md</code>, <code>docs/pipeline_datos.md</code> y <code>docs/modelado.md</code> del repositorio.</p>
+  <p class="anexo-ref">La documentación técnica ampliada de cada etapa está en <code>docs/arquitectura.md</code>, <code>docs/pipeline_datos.md</code> y <code>docs/modelado.md</code> del repositorio.</p>
 </div>
 
 <h2>1. Resumen ejecutivo</h2>
@@ -449,6 +462,1706 @@ reabastecimiento.</li>
 referencias específicas de los módulos del máster que respalden las
 decisiones metodológicas (arquitectura hurdle, validación temporal,
 gradient boosting) según el criterio del alumno.</p>
+
+
+<h2 class="seccion">13. Anexo: código fuente del pipeline</h2>
+<p class="anexo-ref">Este anexo no cuenta para el límite de extensión de la memoria.</p>
+<p>Código fuente completo, tal como está en el repositorio (<code>sponser_etl/</code>), de las tres etapas descritas en las secciones 5, 7 y 8: extracción/transformación de datos, modelado de demanda y cálculo de reabastecimiento. El backend (<code>sponser_api/</code>) y el frontend no se incluyen aquí por extensión; están completos en el repositorio del proyecto.</p>
+<div class="anexo-codigo">
+<h3>sponser_etl/extract.py</h3>
+<p class="ruta">Extracción de los .xls crudos de ventas/inventario</p>
+<pre class="codigo">&quot;&quot;&quot;Extracción de los archivos crudos de ventas e inventario de Sponser.
+
+Los archivos &quot;COM Sponser *.xls&quot; y &quot;Control Sponser *.xls&quot; no son binarios
+Excel: son HTML (una tabla GridView de ASP.NET) exportado con extensión
+.xls. Se parsean con html.parser (stdlib) para no depender de lxml/bs4.
+&quot;&quot;&quot;
+
+from __future__ import annotations
+
+import glob
+import os
+import re
+from dataclasses import dataclass, field
+from html.parser import HTMLParser
+
+import pandas as pd
+
+# Columnas en el orden exacto en el que aparecen en el reporte
+COLUMNAS_VENTAS = [
+    &quot;Tipo Documento&quot;, &quot;nofactura&quot;, &quot;Fecha&quot;, &quot;Entidad&quot;, &quot;Cliente&quot;,
+    &quot;No. Expediente&quot;, &quot;telcel&quot;, &quot;TipoReferencia&quot;, &quot;tipocliente&quot;,
+    &quot;saldofactura&quot;, &quot;Código&quot;, &quot;item&quot;, &quot;Proveedor&quot;, &quot;Cantidad&quot;,
+    &quot;montounitario&quot;, &quot;montocobrado&quot;, &quot;descuentounitario&quot;, &quot;descuentolinea&quot;,
+    &quot;Detalle&quot;, &quot;montototal&quot;, &quot;iv&quot;, &quot;codigobarras&quot;, &quot;Usuario&quot;, &quot;Clave&quot;,
+    &quot;Moneda&quot;, &quot;noreferencia&quot;, &quot;tipopago&quot;,
+]
+
+
+class _GridViewTableParser(HTMLParser):
+    &quot;&quot;&quot;Extrae filas/celdas de la primera &lt;table&gt; del reporte GridView.&quot;&quot;&quot;
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.rows: list[list[str]] = []
+        self._in_table = False
+        self._in_row = False
+        self._in_cell = False
+        self._current_row: list[str] = []
+        self._current_text: list[str] = []
+        self._table_done = False
+
+    def handle_starttag(self, tag, attrs):
+        if self._table_done:
+            return
+        if tag == &quot;table&quot; and not self._in_table:
+            self._in_table = True
+        elif self._in_table and tag == &quot;tr&quot;:
+            self._in_row = True
+            self._current_row = []
+        elif self._in_table and tag in (&quot;td&quot;, &quot;th&quot;):
+            self._in_cell = True
+            self._current_text = []
+
+    def handle_endtag(self, tag):
+        if self._table_done:
+            return
+        if self._in_cell and tag in (&quot;td&quot;, &quot;th&quot;):
+            self._in_cell = False
+            self._current_row.append(&quot;&quot;.join(self._current_text).strip())
+        elif self._in_row and tag == &quot;tr&quot;:
+            self._in_row = False
+            if self._current_row:
+                self.rows.append(self._current_row)
+        elif self._in_table and tag == &quot;table&quot;:
+            self._in_table = False
+            self._table_done = True
+
+    def handle_data(self, data):
+        if self._in_cell:
+            self._current_text.append(data)
+
+
+def parse_html_xls(path: str) -&gt; list[list[str]]:
+    &quot;&quot;&quot;Lee un archivo .xls (en realidad HTML) y devuelve filas de celdas.&quot;&quot;&quot;
+    with open(path, &quot;r&quot;, encoding=&quot;utf-8&quot;, errors=&quot;replace&quot;) as f:
+        contenido = f.read()
+    parser = _GridViewTableParser()
+    parser.feed(contenido)
+    return parser.rows
+
+
+@dataclass
+class ResultadoExtraccion:
+    ventas: pd.DataFrame
+    errores: list[str] = field(default_factory=list)
+
+
+_PATRON_NOMBRE = re.compile(r&quot;^(COM|Control) Sponser (\d{4})\.xls$&quot;, re.IGNORECASE)
+
+
+def _fuente_y_anio(nombre_archivo: str) -&gt; tuple[str, int]:
+    m = _PATRON_NOMBRE.match(nombre_archivo)
+    if not m:
+        raise ValueError(f&quot;Nombre de archivo inesperado: {nombre_archivo}&quot;)
+    fuente = &quot;COM&quot; if m.group(1).lower() == &quot;com&quot; else &quot;Control&quot;
+    return fuente, int(m.group(2))
+
+
+def extract_ventas(raw_dir: str) -&gt; ResultadoExtraccion:
+    &quot;&quot;&quot;Extrae y concatena todos los archivos COM/Control Sponser *.xls de raw_dir.&quot;&quot;&quot;
+    patrones = [
+        os.path.join(raw_dir, &quot;COM Sponser *.xls&quot;),
+        os.path.join(raw_dir, &quot;Control Sponser *.xls&quot;),
+    ]
+    archivos = sorted(p for patron in patrones for p in glob.glob(patron))
+
+    frames: list[pd.DataFrame] = []
+    errores: list[str] = []
+
+    for path in archivos:
+        nombre = os.path.basename(path)
+        try:
+            fuente, anio = _fuente_y_anio(nombre)
+            filas = parse_html_xls(path)
+            if not filas:
+                errores.append(f&quot;{nombre}: sin filas detectadas, se omite&quot;)
+                continue
+
+            header, datos = filas[0], filas[1:]
+            if datos:
+                datos = datos[:-1]  # última fila = totales del reporte, no confiable
+
+            # Por nombre, no por posición: reportes recientes traen una
+            # columna &quot;Marca&quot; extra que los históricos no tienen.
+            header_limpio = [h.strip() for h in header]
+            faltantes = [c for c in COLUMNAS_VENTAS if c not in header_limpio]
+            if faltantes:
+                errores.append(
+                    f&quot;{nombre}: faltan columnas esperadas {faltantes} (encabezado: {header_limpio}), se omite&quot;
+                )
+                continue
+
+            df_crudo = pd.DataFrame(datos, columns=header_limpio)
+            df = df_crudo[COLUMNAS_VENTAS]  # por nombre: ignora columnas extra (ej. Marca)
+            df[&quot;fuente&quot;] = fuente
+            df[&quot;anio&quot;] = anio
+            df[&quot;archivo_origen&quot;] = nombre
+            frames.append(df)
+        except Exception as e:  # noqa: BLE001 - no debe tumbar el pipeline por un archivo
+            errores.append(f&quot;{nombre}: error al procesar ({e})&quot;)
+
+    ventas = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=COLUMNAS_VENTAS)
+    return ResultadoExtraccion(ventas=ventas, errores=errores)
+
+
+def extract_inventario(raw_dir: str) -&gt; pd.DataFrame:
+    &quot;&quot;&quot;Lee el archivo de inventario (xlsx genuino) de raw_dir.&quot;&quot;&quot;
+    candidatos = glob.glob(os.path.join(raw_dir, &quot;Inventario*.xlsx&quot;))
+    if not candidatos:
+        raise FileNotFoundError(f&quot;No se encontró archivo Inventario*.xlsx en {raw_dir}&quot;)
+    return pd.read_excel(candidatos[0])
+</pre>
+<h3>sponser_etl/transform.py</h3>
+<p class="ruta">Limpieza, normalización a USD y tablas agregadas</p>
+<pre class="codigo">&quot;&quot;&quot;Limpieza, unificación y construcción de tablas agregadas.
+
+Todas las tablas de salida quedan expresadas en dólares (USD): las pocas
+filas en colones se convierten con TIPO_CAMBIO_USD antes de agregar nada.
+&quot;&quot;&quot;
+
+from __future__ import annotations
+
+import pandas as pd
+
+# Colones por dólar. Ajustar aquí si se necesita mayor precisión histórica;
+# el impacto es mínimo (solo un puñado de filas del dataset están en colones).
+TIPO_CAMBIO_USD = 530.0
+
+COLUMNAS_MONETARIAS = [
+    &quot;saldo_factura&quot;, &quot;monto_unitario&quot;, &quot;monto_cobrado&quot;,
+    &quot;descuento_unitario&quot;, &quot;descuento_linea&quot;, &quot;monto_total&quot;, &quot;iva&quot;,
+]
+
+_RENAME_VENTAS = {
+    &quot;Tipo Documento&quot;: &quot;tipo_documento&quot;,
+    &quot;nofactura&quot;: &quot;num_factura&quot;,
+    &quot;Fecha&quot;: &quot;fecha&quot;,
+    &quot;Entidad&quot;: &quot;entidad&quot;,
+    &quot;Cliente&quot;: &quot;nombre_cliente&quot;,
+    &quot;No. Expediente&quot;: &quot;id_cliente&quot;,
+    &quot;telcel&quot;: &quot;telefono&quot;,
+    &quot;saldofactura&quot;: &quot;saldo_factura&quot;,
+    &quot;Código&quot;: &quot;codigo_interno_factura&quot;,
+    &quot;item&quot;: &quot;item_descripcion&quot;,
+    &quot;Proveedor&quot;: &quot;proveedor&quot;,
+    &quot;Cantidad&quot;: &quot;cantidad&quot;,
+    &quot;montounitario&quot;: &quot;monto_unitario&quot;,
+    &quot;montocobrado&quot;: &quot;monto_cobrado&quot;,
+    &quot;descuentounitario&quot;: &quot;descuento_unitario&quot;,
+    &quot;descuentolinea&quot;: &quot;descuento_linea&quot;,
+    &quot;Detalle&quot;: &quot;detalle&quot;,
+    &quot;montototal&quot;: &quot;monto_total&quot;,
+    &quot;iv&quot;: &quot;iva&quot;,
+    &quot;Usuario&quot;: &quot;usuario&quot;,
+    &quot;Clave&quot;: &quot;clave_hacienda&quot;,
+    &quot;Moneda&quot;: &quot;moneda&quot;,
+    &quot;tipopago&quot;: &quot;tipo_pago&quot;,
+}
+
+_COLUMNAS_DESCARTABLES = [&quot;TipoReferencia&quot;, &quot;tipocliente&quot;, &quot;codigobarras&quot;, &quot;noreferencia&quot;]
+
+# Líneas que no son venta de producto (p.ej. alquiler de inmueble/consultorio)
+# y distorsionan el modelo de demanda/inventario: se excluyen del dataset.
+_PATRONES_NO_PRODUCTO = [
+    r&quot;^\s*Servicios de alquiler&quot;,
+    r&quot;^\s*BUNDLE&quot;,
+]
+
+# Códigos de producto que se excluyen explícitamente de todo el pipeline (a
+# pedido del negocio) -- no deben aparecer en ningún reporte ni alimentar el
+# modelo de demanda/inventario.
+_SKUS_EXCLUIDOS = {
+    &quot;1015&quot;,  # Electrolytes Fruitmix 10 Tabs
+    &quot;1295&quot;,  # Activator 200 Cola-Lemon UNIDAD 25ml
+}
+
+
+def _a_float(serie: pd.Series) -&gt; pd.Series:
+    limpia = serie.astype(str).str.replace(&quot;,&quot;, &quot;&quot;, regex=False).str.strip()
+    return pd.to_numeric(limpia, errors=&quot;coerce&quot;)
+
+
+def limpiar_ventas(ventas_raw: pd.DataFrame) -&gt; pd.DataFrame:
+    if ventas_raw.empty:
+        return ventas_raw
+
+    df = ventas_raw.drop(columns=_COLUMNAS_DESCARTABLES, errors=&quot;ignore&quot;).rename(columns=_RENAME_VENTAS)
+
+    for patron in _PATRONES_NO_PRODUCTO:
+        excluir = df[&quot;item_descripcion&quot;].astype(str).str.contains(patron, case=False, regex=True, na=False)
+        df = df[~excluir]
+    df = df.reset_index(drop=True)
+
+    df[&quot;fecha&quot;] = pd.to_datetime(df[&quot;fecha&quot;], dayfirst=True, errors=&quot;coerce&quot;)
+
+    for col in [&quot;cantidad&quot;, *COLUMNAS_MONETARIAS]:
+        df[col] = _a_float(df[col])
+
+    df[&quot;num_factura&quot;] = pd.to_numeric(df[&quot;num_factura&quot;], errors=&quot;coerce&quot;).astype(&quot;Int64&quot;)
+    df[&quot;id_cliente&quot;] = pd.to_numeric(df[&quot;id_cliente&quot;], errors=&quot;coerce&quot;).astype(&quot;Int64&quot;)
+    df[&quot;codigo_interno_factura&quot;] = df[&quot;codigo_interno_factura&quot;].astype(str).str.strip()
+    df[&quot;usuario&quot;] = df[&quot;usuario&quot;].astype(str).str.upper().str.strip()
+    df[&quot;nombre_cliente&quot;] = df[&quot;nombre_cliente&quot;].astype(str).str.strip()
+
+    # El código de producto real va embebido al inicio de &quot;item&quot;
+    # (p.ej. &quot;17504 Activator 200 Fruit Boost...&quot;), no en &quot;Código&quot;
+    # (ID interno de facturación, no cruza con inventario).
+    df[&quot;codigo_producto&quot;] = df[&quot;item_descripcion&quot;].astype(str).str.extract(r&quot;^\s*(\d+)&quot;)[0]
+    df[&quot;codigo_producto&quot;] = df[&quot;codigo_producto&quot;].fillna(df[&quot;codigo_interno_factura&quot;])
+
+    df = df[~df[&quot;codigo_producto&quot;].isin(_SKUS_EXCLUIDOS)].reset_index(drop=True)
+
+    # Identificador único de factura: el correlativo se reinicia entre fuentes.
+    df[&quot;factura_id&quot;] = df[&quot;fuente&quot;] + &quot;-&quot; + df[&quot;num_factura&quot;].astype(str)
+
+    # Conversión a USD: se normaliza moneda para que todo el análisis quede en una sola divisa.
+    df[&quot;moneda_original&quot;] = df[&quot;moneda&quot;].astype(str).str.strip()
+    es_colones = df[&quot;moneda_original&quot;].str.upper().str.contains(&quot;COLON&quot;, na=False)
+    df.loc[es_colones, COLUMNAS_MONETARIAS] = df.loc[es_colones, COLUMNAS_MONETARIAS].div(TIPO_CAMBIO_USD)
+    df[&quot;moneda&quot;] = &quot;USD&quot;
+
+    # &quot;monto_total&quot; incluye IVA; el pipeline trabaja en venta neta, así que
+    # se resta acá una sola vez. El bruto queda aparte para conciliación.
+    df[&quot;monto_total_bruto&quot;] = df[&quot;monto_total&quot;]
+    df[&quot;monto_total&quot;] = (df[&quot;monto_total&quot;] - df[&quot;iva&quot;].fillna(0)).round(2)
+
+    return df
+
+
+def separar_patrocinios(ventas: pd.DataFrame) -&gt; tuple[pd.DataFrame, pd.DataFrame]:
+    &quot;&quot;&quot;Todo cliente cuyo nombre contenga &#x27;patrocinio&#x27; recibe producto como
+    patrocinio deportivo -- no es una venta comercial y no debe contarse como
+    tal (infla facturación/unidades y sesga el modelo de demanda). Se separa
+    a su propio apartado en vez de simplemente descartarse.&quot;&quot;&quot;
+    if ventas.empty:
+        return ventas, ventas
+    es_patrocinio = ventas[&quot;nombre_cliente&quot;].astype(str).str.contains(&quot;patrocinio&quot;, case=False, na=False)
+    comerciales = ventas[~es_patrocinio].reset_index(drop=True)
+    patrocinios = ventas[es_patrocinio].reset_index(drop=True)
+    return comerciales, patrocinios
+
+
+def construir_ventas_diarias_producto(ventas: pd.DataFrame) -&gt; pd.DataFrame:
+    if ventas.empty:
+        return pd.DataFrame(columns=[&quot;fecha&quot;, &quot;codigo_producto&quot;, &quot;unidades_vendidas&quot;, &quot;monto_total&quot;, &quot;num_facturas&quot;])
+
+    agg = ventas.groupby([&quot;fecha&quot;, &quot;codigo_producto&quot;]).agg(
+        unidades_vendidas=(&quot;cantidad&quot;, &quot;sum&quot;),
+        monto_total=(&quot;monto_total&quot;, &quot;sum&quot;),
+        num_facturas=(&quot;factura_id&quot;, &quot;nunique&quot;),
+    ).reset_index()
+    return agg.sort_values([&quot;fecha&quot;, &quot;codigo_producto&quot;]).reset_index(drop=True)
+
+
+def construir_clientes_rfm(ventas: pd.DataFrame) -&gt; pd.DataFrame:
+    if ventas.empty:
+        return pd.DataFrame(columns=[
+            &quot;id_cliente&quot;, &quot;nombre_cliente&quot;, &quot;recencia_dias&quot;, &quot;frecuencia&quot;,
+            &quot;monetario_total&quot;, &quot;ticket_promedio&quot;, &quot;productos_distintos&quot;,
+            &quot;antiguedad_dias&quot;, &quot;fuente_principal&quot;,
+        ])
+
+    fecha_max_global = ventas[&quot;fecha&quot;].max()
+
+    nombres = (
+        ventas.groupby(&quot;id_cliente&quot;)[&quot;nombre_cliente&quot;]
+        .agg(lambda s: s.mode().iat[0] if not s.mode().empty else s.iloc[0])
+    )
+    fuente_principal = (
+        ventas.groupby(&quot;id_cliente&quot;)[&quot;fuente&quot;]
+        .agg(lambda s: s.mode().iat[0] if not s.mode().empty else s.iloc[0])
+    )
+
+    base = ventas.groupby(&quot;id_cliente&quot;).agg(
+        fecha_min=(&quot;fecha&quot;, &quot;min&quot;),
+        fecha_max=(&quot;fecha&quot;, &quot;max&quot;),
+        frecuencia=(&quot;factura_id&quot;, &quot;nunique&quot;),
+        monetario_total=(&quot;monto_total&quot;, &quot;sum&quot;),
+        productos_distintos=(&quot;codigo_producto&quot;, &quot;nunique&quot;),
+    )
+
+    base[&quot;nombre_cliente&quot;] = nombres
+    base[&quot;fuente_principal&quot;] = fuente_principal
+    base[&quot;recencia_dias&quot;] = (fecha_max_global - base[&quot;fecha_max&quot;]).dt.days
+    base[&quot;antiguedad_dias&quot;] = (base[&quot;fecha_max&quot;] - base[&quot;fecha_min&quot;]).dt.days
+    base[&quot;ticket_promedio&quot;] = base[&quot;monetario_total&quot;] / base[&quot;frecuencia&quot;]
+
+    resultado = base.reset_index()[[
+        &quot;id_cliente&quot;, &quot;nombre_cliente&quot;, &quot;recencia_dias&quot;, &quot;frecuencia&quot;,
+        &quot;monetario_total&quot;, &quot;ticket_promedio&quot;, &quot;productos_distintos&quot;,
+        &quot;antiguedad_dias&quot;, &quot;fuente_principal&quot;,
+    ]]
+    return resultado.sort_values(&quot;monetario_total&quot;, ascending=False).reset_index(drop=True)
+
+
+def construir_inventario_lotes(inventario_raw: pd.DataFrame) -&gt; pd.DataFrame:
+    &quot;&quot;&quot;Reshape wide-&gt;long: una fila por lote (Lote1 y Lote2 separados en el original).&quot;&quot;&quot;
+    if inventario_raw.empty:
+        return pd.DataFrame(columns=[&quot;codigo_producto&quot;, &quot;descripcion&quot;, &quot;lote_id&quot;, &quot;cantidad&quot;, &quot;fecha_vencimiento&quot;])
+
+    cols = list(inventario_raw.columns)
+    # Posiciones fijas según el layout confirmado del reporte de inventario.
+    col_codigo, col_desc = cols[0], cols[1]
+    col_lote1_id, col_lote1_qty, col_lote1_venc = cols[4], cols[5], cols[6]
+    col_lote2_id, col_lote2_qty, col_lote2_venc = cols[7], cols[8], cols[9]
+
+    base = inventario_raw[[col_codigo, col_desc]].rename(
+        columns={col_codigo: &quot;codigo_producto&quot;, col_desc: &quot;descripcion&quot;}
+    )
+    base[&quot;codigo_producto&quot;] = base[&quot;codigo_producto&quot;].astype(str).str.strip()
+    base[&quot;descripcion&quot;] = base[&quot;descripcion&quot;].astype(str).str.strip()
+
+    lote1 = base.copy()
+    lote1[&quot;lote_id&quot;] = inventario_raw[col_lote1_id]
+    lote1[&quot;cantidad&quot;] = pd.to_numeric(inventario_raw[col_lote1_qty], errors=&quot;coerce&quot;)
+    lote1[&quot;fecha_vencimiento&quot;] = pd.to_datetime(inventario_raw[col_lote1_venc], errors=&quot;coerce&quot;)
+
+    lote2 = base.copy()
+    lote2[&quot;lote_id&quot;] = inventario_raw[col_lote2_id]
+    lote2[&quot;cantidad&quot;] = pd.to_numeric(inventario_raw[col_lote2_qty], errors=&quot;coerce&quot;)
+    lote2[&quot;fecha_vencimiento&quot;] = pd.to_datetime(inventario_raw[col_lote2_venc], errors=&quot;coerce&quot;)
+
+    lotes = pd.concat([lote1, lote2], ignore_index=True)
+    lotes = lotes.dropna(subset=[&quot;cantidad&quot;])
+    lotes = lotes[lotes[&quot;cantidad&quot;] &gt; 0].reset_index(drop=True)
+    return lotes[[&quot;codigo_producto&quot;, &quot;descripcion&quot;, &quot;lote_id&quot;, &quot;cantidad&quot;, &quot;fecha_vencimiento&quot;]]
+</pre>
+<h3>sponser_etl/load.py</h3>
+<p class="ruta">Escritura de las tablas procesadas a CSV</p>
+<pre class="codigo">&quot;&quot;&quot;Escritura de las tablas procesadas a CSV.&quot;&quot;&quot;
+
+from __future__ import annotations
+
+import os
+
+import pandas as pd
+
+
+def guardar_tablas(tablas: dict[str, pd.DataFrame], out_dir: str) -&gt; None:
+    os.makedirs(out_dir, exist_ok=True)
+    for nombre, df in tablas.items():
+        ruta = os.path.join(out_dir, f&quot;{nombre}.csv&quot;)
+        df.to_csv(ruta, index=False, encoding=&quot;utf-8&quot;)
+</pre>
+<h3>sponser_etl/pipeline.py</h3>
+<p class="ruta">Orquestador del pipeline ETL</p>
+<pre class="codigo">&quot;&quot;&quot;Orquestador del pipeline ETL de ventas Sponser.
+
+Uso: python pipeline.py
+Lee los .xls/.xlsx crudos de RAW_DIR, limpia y agrega los datos, y escribe
+las tablas resultantes en data/processed/. Se puede volver a correr tal
+cual cuando llegue el archivo de un nuevo año/periodo.
+&quot;&quot;&quot;
+
+from __future__ import annotations
+
+import os
+import sys
+
+import pandas as pd
+
+import extract
+import transform
+import load
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+RAW_DIR = os.path.join(BASE_DIR, &quot;data&quot;, &quot;raw&quot;)
+OUT_DIR = os.path.join(BASE_DIR, &quot;data&quot;, &quot;processed&quot;)
+
+
+def main() -&gt; int:
+    print(f&quot;Leyendo archivos crudos desde: {RAW_DIR}&quot;)
+    resultado = extract.extract_ventas(RAW_DIR)
+
+    for err in resultado.errores:
+        print(f&quot;  [warning] {err}&quot;, file=sys.stderr)
+
+    if resultado.ventas.empty:
+        print(&quot;No se extrajo ninguna fila de ventas. Revisa RAW_DIR y los nombres de archivo.&quot;)
+        return 1
+
+    ventas_todo = transform.limpiar_ventas(resultado.ventas)
+    ventas, patrocinios = transform.separar_patrocinios(ventas_todo)
+    ventas_diarias = transform.construir_ventas_diarias_producto(ventas)
+    clientes_rfm = transform.construir_clientes_rfm(ventas)
+
+    try:
+        inventario_raw = extract.extract_inventario(RAW_DIR)
+        inventario_lotes = transform.construir_inventario_lotes(inventario_raw)
+    except FileNotFoundError as e:
+        print(f&quot;  [warning] {e}&quot;, file=sys.stderr)
+        inventario_lotes = transform.construir_inventario_lotes(pd.DataFrame())
+
+    tablas = {
+        &quot;ventas_detalle&quot;: ventas,
+        &quot;ventas_diarias_producto&quot;: ventas_diarias,
+        &quot;clientes_rfm&quot;: clientes_rfm,
+        &quot;inventario_lotes&quot;: inventario_lotes,
+        &quot;patrocinios&quot;: patrocinios,
+    }
+    load.guardar_tablas(tablas, OUT_DIR)
+
+    print(&quot;\nResumen:&quot;)
+    for nombre, df in tablas.items():
+        print(f&quot;  {nombre}: {len(df):,} filas -&gt; {os.path.join(OUT_DIR, nombre + &#x27;.csv&#x27;)}&quot;)
+
+    if not ventas.empty:
+        print(f&quot;\n  Rango de fechas en ventas: {ventas[&#x27;fecha&#x27;].min().date()} -&gt; {ventas[&#x27;fecha&#x27;].max().date()}&quot;)
+        print(f&quot;  Facturas distintas: {ventas[&#x27;factura_id&#x27;].nunique():,}&quot;)
+        print(f&quot;  Clientes distintos: {ventas[&#x27;id_cliente&#x27;].nunique():,}&quot;)
+        monedas_no_usd = (ventas[&#x27;moneda&#x27;] != &#x27;USD&#x27;).sum()
+        print(f&quot;  Filas con moneda distinta de USD tras conversión: {monedas_no_usd}&quot;)
+    if not patrocinios.empty:
+        print(f&quot;\n  Patrocinios separados: {len(patrocinios):,} filas, &quot;
+              f&quot;{patrocinios[&#x27;id_cliente&#x27;].nunique():,} clientes, &quot;
+              f&quot;${patrocinios[&#x27;monto_total&#x27;].sum():,.2f} netos (excluidos de ventas)&quot;)
+
+    if resultado.errores:
+        print(f&quot;\n{len(resultado.errores)} advertencia(s) durante la extracción (ver arriba).&quot;)
+
+    return 0
+
+
+if __name__ == &quot;__main__&quot;:
+    raise SystemExit(main())
+</pre>
+<h3>sponser_etl/modeling/features.py</h3>
+<p class="ruta">Panel producto x fecha: calendario, eventos, rezagos, calibración</p>
+<pre class="codigo">&quot;&quot;&quot;Construcción del panel producto x fecha con features de calendario, eventos y rezagos.
+
+Compartido por train.py (panel histórico) y forecast.py (panel extendido día a día
+durante el pronóstico recursivo). Es código único (no versionado por archivo) —
+lo que varía entre versiones del modelo queda registrado en versions/vN/config.json.
+&quot;&quot;&quot;
+
+from __future__ import annotations
+
+import json
+import os
+
+import numpy as np
+import pandas as pd
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # sponser_etl/
+PROCESSED_DIR = os.path.join(BASE_DIR, &quot;data&quot;, &quot;processed&quot;)
+EVENTOS_PATH = os.path.join(BASE_DIR, &quot;eventos.csv&quot;)
+
+LAGS = [1, 2, 3, 7, 14, 28]
+ROLLING_WINDOWS = [7, 28, 90]
+
+NUMERIC_FEATURES = [
+    &quot;dia_mes&quot;, &quot;semana_anio&quot;, &quot;trimestre&quot;, &quot;es_fin_de_semana&quot;,
+    &quot;es_evento&quot;, &quot;dias_hasta_proximo_evento&quot;, &quot;dias_desde_evento_anterior&quot;,
+    *[f&quot;lag_{n}&quot; for n in LAGS],
+    *[f&quot;rolling_mean_{n}&quot; for n in ROLLING_WINDOWS],
+    &quot;rolling_std_7&quot;,
+    &quot;historico_promedio_producto&quot;,
+]
+CATEGORICAL_ENC_FEATURES = [&quot;codigo_producto_enc&quot;, &quot;dia_semana&quot;, &quot;tipo_evento_activo_enc&quot;]
+MODEL_FEATURES = NUMERIC_FEATURES + CATEGORICAL_ENC_FEATURES
+TARGET_COLUMN = &quot;unidades_vendidas&quot;
+
+
+def cargar_ventas_diarias() -&gt; pd.DataFrame:
+    path = os.path.join(PROCESSED_DIR, &quot;ventas_diarias_producto.csv&quot;)
+    df = pd.read_csv(path, parse_dates=[&quot;fecha&quot;], dtype={&quot;codigo_producto&quot;: str})
+    return df[[&quot;fecha&quot;, &quot;codigo_producto&quot;, &quot;unidades_vendidas&quot;]].copy()
+
+
+def cargar_eventos() -&gt; pd.DataFrame:
+    columnas = [&quot;fecha_inicio&quot;, &quot;fecha_fin&quot;, &quot;tipo_evento&quot;, &quot;nombre_evento&quot;]
+    if not os.path.exists(EVENTOS_PATH):
+        return pd.DataFrame(columns=columnas)
+    df = pd.read_csv(EVENTOS_PATH)
+    if df.empty:
+        return pd.DataFrame(columns=columnas)
+    df[&quot;fecha_inicio&quot;] = pd.to_datetime(df[&quot;fecha_inicio&quot;], errors=&quot;coerce&quot;)
+    df[&quot;fecha_fin&quot;] = pd.to_datetime(df[&quot;fecha_fin&quot;], errors=&quot;coerce&quot;)
+    df = df.dropna(subset=[&quot;fecha_inicio&quot;, &quot;fecha_fin&quot;])
+    df[&quot;tipo_evento&quot;] = df[&quot;tipo_evento&quot;].astype(str).str.strip().str.lower()
+    return df
+
+
+def construir_panel_base(ventas: pd.DataFrame, fecha_max: pd.Timestamp | None = None) -&gt; pd.DataFrame:
+    &quot;&quot;&quot;Expande a grilla completa producto x fecha, rellenando ceros donde no hubo venta.&quot;&quot;&quot;
+    productos = ventas[&quot;codigo_producto&quot;].unique()
+    fecha_min = ventas[&quot;fecha&quot;].min()
+    fecha_max = fecha_max or ventas[&quot;fecha&quot;].max()
+    fechas = pd.date_range(fecha_min, fecha_max, freq=&quot;D&quot;)
+
+    idx = pd.MultiIndex.from_product([productos, fechas], names=[&quot;codigo_producto&quot;, &quot;fecha&quot;])
+    panel = pd.DataFrame(index=idx).reset_index()
+
+    panel = panel.merge(ventas, on=[&quot;codigo_producto&quot;, &quot;fecha&quot;], how=&quot;left&quot;)
+    panel[&quot;unidades_vendidas&quot;] = panel[&quot;unidades_vendidas&quot;].fillna(0.0)
+    return panel.sort_values([&quot;codigo_producto&quot;, &quot;fecha&quot;]).reset_index(drop=True)
+
+
+def agregar_features_calendario(panel: pd.DataFrame) -&gt; pd.DataFrame:
+    panel[&quot;dia_semana&quot;] = panel[&quot;fecha&quot;].dt.dayofweek
+    panel[&quot;mes&quot;] = panel[&quot;fecha&quot;].dt.month
+    panel[&quot;dia_mes&quot;] = panel[&quot;fecha&quot;].dt.day
+    panel[&quot;semana_anio&quot;] = panel[&quot;fecha&quot;].dt.isocalendar().week.astype(int)
+    panel[&quot;trimestre&quot;] = panel[&quot;fecha&quot;].dt.quarter
+    panel[&quot;es_fin_de_semana&quot;] = panel[&quot;dia_semana&quot;].isin([5, 6]).astype(int)
+    return panel
+
+
+def agregar_features_evento(panel: pd.DataFrame, eventos: pd.DataFrame) -&gt; pd.DataFrame:
+    fechas_unicas = panel[&quot;fecha&quot;].drop_duplicates().sort_values().reset_index(drop=True)
+
+    es_evento_por_fecha = {}
+    tipo_por_fecha = {}
+    for f in fechas_unicas:
+        activos = eventos[(eventos[&quot;fecha_inicio&quot;] &lt;= f) &amp; (eventos[&quot;fecha_fin&quot;] &gt;= f)]
+        es_evento_por_fecha[f] = 1 if not activos.empty else 0
+        tipo_por_fecha[f] = activos.iloc[0][&quot;tipo_evento&quot;] if not activos.empty else &quot;ninguno&quot;
+
+    inicios = eventos[&quot;fecha_inicio&quot;].sort_values().to_numpy() if not eventos.empty else np.array([], dtype=&quot;datetime64[ns]&quot;)
+    fines = eventos[&quot;fecha_fin&quot;].sort_values().to_numpy() if not eventos.empty else np.array([], dtype=&quot;datetime64[ns]&quot;)
+
+    def _dias_hasta_proximo(f):
+        futuros = inicios[inicios &gt;= np.datetime64(f)]
+        if len(futuros) == 0:
+            return 999
+        return int((futuros.min() - np.datetime64(f)) / np.timedelta64(1, &quot;D&quot;))
+
+    def _dias_desde_anterior(f):
+        pasados = fines[fines &lt;= np.datetime64(f)]
+        if len(pasados) == 0:
+            return 999
+        return int((np.datetime64(f) - pasados.max()) / np.timedelta64(1, &quot;D&quot;))
+
+    dias_hasta = {f: _dias_hasta_proximo(f) for f in fechas_unicas}
+    dias_desde = {f: _dias_desde_anterior(f) for f in fechas_unicas}
+
+    panel[&quot;es_evento&quot;] = panel[&quot;fecha&quot;].map(es_evento_por_fecha).astype(int)
+    panel[&quot;tipo_evento_activo&quot;] = panel[&quot;fecha&quot;].map(tipo_por_fecha)
+    panel[&quot;dias_hasta_proximo_evento&quot;] = panel[&quot;fecha&quot;].map(dias_hasta).astype(int)
+    panel[&quot;dias_desde_evento_anterior&quot;] = panel[&quot;fecha&quot;].map(dias_desde).astype(int)
+    return panel
+
+
+def agregar_features_rezago(panel: pd.DataFrame) -&gt; pd.DataFrame:
+    panel = panel.sort_values([&quot;codigo_producto&quot;, &quot;fecha&quot;]).reset_index(drop=True)
+    grouped = panel.groupby(&quot;codigo_producto&quot;)[&quot;unidades_vendidas&quot;]
+    for n in LAGS:
+        panel[f&quot;lag_{n}&quot;] = grouped.shift(n)
+    for n in ROLLING_WINDOWS:
+        panel[f&quot;rolling_mean_{n}&quot;] = grouped.transform(lambda s, n=n: s.shift(1).rolling(n).mean())
+    panel[&quot;rolling_std_7&quot;] = grouped.transform(lambda s: s.shift(1).rolling(7).std())
+    # Nivel histórico del producto (promedio expandido, sin ver el día actual): ancla
+    # explícita para que el pronóstico recursivo no derive lejos del nivel real del
+    # producto solo por depender de que el árbol separe bien 175 categorías.
+    panel[&quot;historico_promedio_producto&quot;] = grouped.transform(lambda s: s.shift(1).expanding().mean())
+    return panel
+
+
+def construir_panel(
+    ventas: pd.DataFrame | None = None,
+    eventos: pd.DataFrame | None = None,
+    fecha_max: pd.Timestamp | None = None,
+) -&gt; pd.DataFrame:
+    if ventas is None:
+        ventas = cargar_ventas_diarias()
+    if eventos is None:
+        eventos = cargar_eventos()
+    panel = construir_panel_base(ventas, fecha_max=fecha_max)
+    panel = agregar_features_calendario(panel)
+    panel = agregar_features_evento(panel, eventos)
+    panel = agregar_features_rezago(panel)
+    return panel
+
+
+# --- Codificación de variables categóricas (consistente entre train y forecast) ---
+
+def construir_encoders(panel: pd.DataFrame) -&gt; dict:
+    codigo_map = {c: i for i, c in enumerate(sorted(panel[&quot;codigo_producto&quot;].unique()))}
+    tipo_map = {t: i for i, t in enumerate(sorted(panel[&quot;tipo_evento_activo&quot;].unique()))}
+    if &quot;ninguno&quot; not in tipo_map:
+        tipo_map[&quot;ninguno&quot;] = len(tipo_map)
+    return {&quot;codigo_producto_map&quot;: codigo_map, &quot;tipo_evento_map&quot;: tipo_map}
+
+
+def aplicar_encoders(panel: pd.DataFrame, encoders: dict) -&gt; pd.DataFrame:
+    codigo_map = encoders[&quot;codigo_producto_map&quot;]
+    tipo_map = encoders[&quot;tipo_evento_map&quot;]
+    fallback_tipo = tipo_map.get(&quot;ninguno&quot;, -1)
+
+    panel = panel.copy()
+    panel[&quot;codigo_producto_enc&quot;] = panel[&quot;codigo_producto&quot;].map(codigo_map)
+    panel[&quot;tipo_evento_activo_enc&quot;] = panel[&quot;tipo_evento_activo&quot;].map(tipo_map).fillna(fallback_tipo).astype(int)
+    return panel
+
+
+def guardar_encoders(encoders: dict, path: str) -&gt; None:
+    with open(path, &quot;w&quot;, encoding=&quot;utf-8&quot;) as f:
+        json.dump(encoders, f, ensure_ascii=False, indent=2)
+
+
+def cargar_encoders(path: str) -&gt; dict:
+    with open(path, &quot;r&quot;, encoding=&quot;utf-8&quot;) as f:
+        return json.load(f)
+
+
+# --- Calibración por producto (post-modelo, se calcula una vez en train.py a
+# partir de un backtest recursivo y se aplica igual en forecast.py) ---
+
+
+def aplicar_calibracion(pred: np.ndarray, fila: pd.DataFrame, calibracion: dict | None) -&gt; np.ndarray:
+    &quot;&quot;&quot;`fila` debe incluir la columna codigo_producto (no solo MODEL_FEATURES).
+    Sin calibración, solo recorta a &gt;= 0 (retrocompatible con versiones sin
+    calibracion.json).&quot;&quot;&quot;
+    pred = np.asarray(pred, dtype=float).copy()
+    if not calibracion:
+        return np.clip(pred, 0, None)
+
+    inactivos = set(calibracion[&quot;productos_inactivos&quot;])
+    tercil_por_producto = calibracion[&quot;tercil_por_producto&quot;]
+    factores = calibracion[&quot;factores_por_tercil&quot;]
+
+    codigos = fila[&quot;codigo_producto&quot;].astype(str).to_numpy()
+    factor_por_fila = np.array([
+        0.0 if c in inactivos else factores.get(tercil_por_producto.get(c, &quot;&quot;), 1.0)
+        for c in codigos
+    ])
+    return np.clip(pred * factor_por_fila, 0, None)
+
+
+def guardar_calibracion(calibracion: dict, path: str) -&gt; None:
+    with open(path, &quot;w&quot;, encoding=&quot;utf-8&quot;) as f:
+        json.dump(calibracion, f, ensure_ascii=False, indent=2)
+
+
+def cargar_calibracion(path: str) -&gt; dict | None:
+    if not os.path.exists(path):
+        return None
+    with open(path, &quot;r&quot;, encoding=&quot;utf-8&quot;) as f:
+        return json.load(f)
+</pre>
+<h3>sponser_etl/modeling/train.py</h3>
+<p class="ruta">Entrenamiento del modelo hurdle (clasificación + regresión Poisson)</p>
+<pre class="codigo">&quot;&quot;&quot;Entrena el modelo de demanda diaria por producto.
+
+Uso: python train.py (desde sponser_etl/modeling/). Cada corrida crea una
+versión nueva en versions/vN/ y actualiza versions/LATEST.txt. Split temporal:
+últimos DIAS_VALIDACION días como validación, el resto entrenamiento.
+
+TIPO_MODELO: &quot;tweedie_directo&quot; (un LightGBM prediciendo unidades directo,
+usado en v1-v4) o &quot;hurdle&quot; (clasificador P(hay venta) + regresor Poisson de
+cantidad dado que hubo venta; predicción final = P(venta) x E[cantidad|venta]).
+&quot;&quot;&quot;
+
+from __future__ import annotations
+
+import datetime
+import json
+import os
+
+import lightgbm as lgb
+import numpy as np
+import pandas as pd
+
+import features
+import forecast
+import versioning
+
+TIPO_MODELO = &quot;hurdle&quot;
+DIAS_VALIDACION = 150  # debe coincidir con DIAS_BACKTEST en backtest.py
+DIAS_ACTIVIDAD_RECIENTE = 90  # sin venta en esta ventana antes del corte -&gt; se considera inactivo
+
+HYPERPARAMS_COMUNES = dict(
+    n_estimators=1500,
+    learning_rate=0.03,
+    num_leaves=15,
+    min_child_samples=50,
+    reg_lambda=1.0,
+    random_state=42,
+)
+HYPERPARAMS_TWEEDIE = dict(objective=&quot;tweedie&quot;, tweedie_variance_power=1.1, **HYPERPARAMS_COMUNES)
+HYPERPARAMS_CLASIFICACION = dict(objective=&quot;binary&quot;, **HYPERPARAMS_COMUNES)
+HYPERPARAMS_REGRESION_POSITIVOS = dict(objective=&quot;poisson&quot;, **HYPERPARAMS_COMUNES)
+
+
+def wmape(y_true: np.ndarray, y_pred: np.ndarray) -&gt; float:
+    return float(np.abs(y_true - y_pred).sum() / max(np.abs(y_true).sum(), 1e-9))
+
+
+def calibrar_via_backtest_recursivo(
+    modelo_crudo: dict,
+    encoders: dict,
+    ventas: pd.DataFrame,
+    cutoff: pd.Timestamp,
+    fecha_max: pd.Timestamp,
+    dias: int,
+    dias_actividad_reciente: int = DIAS_ACTIVIDAD_RECIENTE,
+    n_terciles: int = 3,
+) -&gt; dict:
+    &quot;&quot;&quot;Calibración por producto, corriendo el mismo pronóstico recursivo de
+    forecast.py/backtest.py sobre la ventana de validación (modelo sin
+    calibrar) en vez de usar métricas de un solo paso.&quot;&quot;&quot;
+    historial_train = ventas[ventas[&quot;fecha&quot;] &lt; cutoff].copy()
+    print(f&quot;\nCalculando calibración con un backtest recursivo interno &quot;
+          f&quot;({dias} días, {cutoff.date()} -&gt; {fecha_max.date()}, modelo sin calibrar)...&quot;)
+    pred_df = forecast.forecast_recursivo(modelo_crudo, encoders, dias=dias, historial_inicial=historial_train)
+
+    productos = historial_train[&quot;codigo_producto&quot;].unique()
+    fechas_val = pd.date_range(cutoff, fecha_max, freq=&quot;D&quot;)
+    idx = pd.MultiIndex.from_product([productos, fechas_val], names=[&quot;codigo_producto&quot;, &quot;fecha&quot;])
+    real_df = pd.DataFrame(index=idx).reset_index().merge(ventas, on=[&quot;codigo_producto&quot;, &quot;fecha&quot;], how=&quot;left&quot;)
+    real_df[&quot;unidades_vendidas&quot;] = real_df[&quot;unidades_vendidas&quot;].fillna(0.0)
+    comp = pred_df.merge(real_df, on=[&quot;fecha&quot;, &quot;codigo_producto&quot;], how=&quot;inner&quot;)
+
+    por_producto = comp.groupby(&quot;codigo_producto&quot;).agg(
+        real=(&quot;unidades_vendidas&quot;, &quot;sum&quot;),
+        pronosticado=(&quot;unidades_pronosticadas&quot;, &quot;sum&quot;),
+    )
+
+    venta_reciente = historial_train[historial_train[&quot;fecha&quot;] &gt;= cutoff - pd.Timedelta(days=dias_actividad_reciente)]
+    venta_reciente_por_producto = venta_reciente.groupby(&quot;codigo_producto&quot;)[&quot;unidades_vendidas&quot;].sum()
+    por_producto[&quot;venta_reciente&quot;] = por_producto.index.map(venta_reciente_por_producto).fillna(0.0)
+
+    productos_inactivos = por_producto.index[por_producto[&quot;venta_reciente&quot;] &lt;= 0].tolist()
+
+    activos = por_producto[por_producto[&quot;venta_reciente&quot;] &gt; 0].copy()
+    promedio_historico = historial_train.groupby(&quot;codigo_producto&quot;)[&quot;unidades_vendidas&quot;].mean()
+    activos[&quot;promedio_historico&quot;] = activos.index.map(promedio_historico).fillna(0.0)
+
+    tercil_por_producto: dict[str, str] = {}
+    factores_por_tercil: dict[str, float] = {}
+    if len(activos) &gt;= n_terciles:
+        terciles = pd.qcut(activos[&quot;promedio_historico&quot;], n_terciles, duplicates=&quot;drop&quot;)
+        for etiqueta, grupo in activos.groupby(terciles, observed=True):
+            etiqueta = str(etiqueta)
+            real_sum = grupo[&quot;real&quot;].sum()
+            pred_sum = grupo[&quot;pronosticado&quot;].sum()
+            factores_por_tercil[etiqueta] = float(real_sum / pred_sum) if pred_sum &gt; 1e-9 else 1.0
+            for cod in grupo.index:
+                tercil_por_producto[cod] = etiqueta
+
+    return {
+        &quot;productos_inactivos&quot;: productos_inactivos,
+        &quot;tercil_por_producto&quot;: tercil_por_producto,
+        &quot;factores_por_tercil&quot;: factores_por_tercil,
+        &quot;dias_actividad_reciente&quot;: dias_actividad_reciente,
+        &quot;n_productos_inactivos&quot;: len(productos_inactivos),
+    }
+
+
+def entrenar_tweedie_directo(X_train, y_train, X_val, y_val):
+    modelo = lgb.LGBMRegressor(**HYPERPARAMS_TWEEDIE)
+    modelo.fit(
+        X_train, y_train,
+        eval_set=[(X_val, y_val)],
+        eval_metric=&quot;mae&quot;,
+        categorical_feature=features.CATEGORICAL_ENC_FEATURES,
+        callbacks=[lgb.early_stopping(stopping_rounds=80), lgb.log_evaluation(period=100)],
+    )
+    pred_val = np.clip(modelo.predict(X_val), 0, None)
+    return {
+        &quot;tipo&quot;: &quot;tweedie_directo&quot;,
+        &quot;boosters&quot;: {&quot;regresion&quot;: modelo.booster_},
+        &quot;hyperparams&quot;: {&quot;regresion&quot;: HYPERPARAMS_TWEEDIE},
+        &quot;pred_val&quot;: pred_val,
+    }
+
+
+def entrenar_hurdle(X_train, y_train, X_val, y_val):
+    y_train_bin = (y_train &gt; 0).astype(int)
+    y_val_bin = (y_val &gt; 0).astype(int)
+
+    print(&quot;\n--- Etapa 1: clasificación (¿hay venta ese producto ese día?) ---&quot;)
+    clasificador = lgb.LGBMClassifier(**HYPERPARAMS_CLASIFICACION)
+    clasificador.fit(
+        X_train, y_train_bin,
+        eval_set=[(X_val, y_val_bin)],
+        eval_metric=&quot;auc&quot;,
+        categorical_feature=features.CATEGORICAL_ENC_FEATURES,
+        callbacks=[lgb.early_stopping(stopping_rounds=80), lgb.log_evaluation(period=100)],
+    )
+    p_val = clasificador.predict_proba(X_val)[:, 1]
+
+    print(&quot;\n--- Etapa 2: regresión (cuánto se vende, dado que sí hubo venta) ---&quot;)
+    mask_train_pos = y_train &gt; 0
+    mask_val_pos = y_val &gt; 0
+    regresor = lgb.LGBMRegressor(**HYPERPARAMS_REGRESION_POSITIVOS)
+    regresor.fit(
+        X_train[mask_train_pos], y_train[mask_train_pos],
+        eval_set=[(X_val[mask_val_pos], y_val[mask_val_pos])],
+        eval_metric=&quot;mae&quot;,
+        categorical_feature=features.CATEGORICAL_ENC_FEATURES,
+        callbacks=[lgb.early_stopping(stopping_rounds=80), lgb.log_evaluation(period=100)],
+    )
+    q_val = regresor.predict(X_val)
+
+    pred_val = np.clip(p_val * q_val, 0, None)
+
+    return {
+        &quot;tipo&quot;: &quot;hurdle&quot;,
+        &quot;boosters&quot;: {&quot;clasificacion&quot;: clasificador.booster_, &quot;regresion&quot;: regresor.booster_},
+        &quot;hyperparams&quot;: {&quot;clasificacion&quot;: HYPERPARAMS_CLASIFICACION, &quot;regresion&quot;: HYPERPARAMS_REGRESION_POSITIVOS},
+        &quot;pred_val&quot;: pred_val,
+        &quot;diagnostico&quot;: {
+            &quot;auc_clasificacion&quot;: float(clasificador.booster_.best_score[&quot;valid_0&quot;][&quot;auc&quot;]),
+            &quot;tasa_venta_real_val&quot;: float(y_val_bin.mean()),
+        },
+    }
+
+
+def main() -&gt; int:
+    version = versioning.siguiente_version()
+    vdir = versioning.version_dir(version)
+    print(f&quot;Entrenando versión {version} (tipo: {TIPO_MODELO}) -&gt; {vdir}&quot;)
+
+    print(&quot;Construyendo panel histórico (producto x fecha, calendario, eventos, rezagos)...&quot;)
+    panel = features.construir_panel()
+
+    encoders = features.construir_encoders(panel)
+    panel = features.aplicar_encoders(panel, encoders)
+    features.guardar_encoders(encoders, os.path.join(vdir, &quot;encoders.json&quot;))
+
+    fecha_max = panel[&quot;fecha&quot;].max()
+    cutoff = fecha_max - pd.Timedelta(days=DIAS_VALIDACION - 1)
+    train_df = panel[panel[&quot;fecha&quot;] &lt; cutoff]
+    val_df = panel[panel[&quot;fecha&quot;] &gt;= cutoff]
+
+    print(f&quot;Entrenamiento: {len(train_df):,} filas ({panel[&#x27;fecha&#x27;].min().date()} -&gt; {(cutoff - pd.Timedelta(days=1)).date()})&quot;)
+    print(f&quot;Validación:    {len(val_df):,} filas ({cutoff.date()} -&gt; {fecha_max.date()})&quot;)
+
+    X_train, y_train = train_df[features.MODEL_FEATURES], train_df[features.TARGET_COLUMN]
+    X_val, y_val = val_df[features.MODEL_FEATURES], val_df[features.TARGET_COLUMN]
+
+    if TIPO_MODELO == &quot;hurdle&quot;:
+        resultado = entrenar_hurdle(X_train, y_train, X_val, y_val)
+    elif TIPO_MODELO == &quot;tweedie_directo&quot;:
+        resultado = entrenar_tweedie_directo(X_train, y_train, X_val, y_val)
+    else:
+        raise ValueError(f&quot;TIPO_MODELO desconocido: {TIPO_MODELO}&quot;)
+
+    pred_val_crudo = resultado[&quot;pred_val&quot;]
+    mae_crudo = float(np.mean(np.abs(y_val.to_numpy() - pred_val_crudo)))
+    w_crudo = wmape(y_val.to_numpy(), pred_val_crudo)
+
+    modelo_crudo = {&quot;tipo&quot;: resultado[&quot;tipo&quot;], **resultado[&quot;boosters&quot;], &quot;calibracion&quot;: None}
+    ventas_completas = features.cargar_ventas_diarias()
+    calibracion = calibrar_via_backtest_recursivo(
+        modelo_crudo, encoders, ventas_completas, cutoff, fecha_max, DIAS_VALIDACION
+    )
+    features.guardar_calibracion(calibracion, os.path.join(vdir, &quot;calibracion.json&quot;))
+
+    pred_val = features.aplicar_calibracion(pred_val_crudo, val_df, calibracion)
+    mae = float(np.mean(np.abs(y_val.to_numpy() - pred_val)))
+    rmse = float(np.sqrt(np.mean((y_val.to_numpy() - pred_val) ** 2)))
+    w = wmape(y_val.to_numpy(), pred_val)
+
+    print(f&quot;\nFactores de calibración por tercil: {calibracion[&#x27;factores_por_tercil&#x27;]}&quot;)
+    print(f&quot;Productos sin venta en los últimos {DIAS_ACTIVIDAD_RECIENTE} días antes del corte &quot;
+          f&quot;(forzados a 0): {calibracion[&#x27;n_productos_inactivos&#x27;]}&quot;)
+
+    print(f&quot;\nMétricas de validación single-step ({TIPO_MODELO}, con rezagos reales — la calibración &quot;
+          f&quot;se calculó recursivamente pero acá se aplica también a este set de un solo paso, solo &quot;
+          f&quot;como referencia rápida; la comparación real está en backtest.py):&quot;)
+    print(f&quot;  Sin calibrar -&gt; MAE: {mae_crudo:.3f}  WMAPE: {w_crudo:.1%}&quot;)
+    print(f&quot;  Calibrado    -&gt; MAE: {mae:.3f}  RMSE: {rmse:.3f}  WMAPE: {w:.1%}&quot;)
+    if &quot;diagnostico&quot; in resultado:
+        d = resultado[&quot;diagnostico&quot;]
+        print(f&quot;  AUC clasificación (¿hay venta?): {d[&#x27;auc_clasificacion&#x27;]:.3f}&quot;)
+        print(f&quot;  Tasa real de días con venta en validación: {d[&#x27;tasa_venta_real_val&#x27;]:.1%}&quot;)
+
+    model_paths = {}
+    for nombre, booster in resultado[&quot;boosters&quot;].items():
+        path = os.path.join(vdir, f&quot;model_{nombre}.txt&quot;)
+        booster.save_model(path)
+        model_paths[nombre] = os.path.basename(path)
+        print(f&quot;Modelo &#x27;{nombre}&#x27; guardado en: {path}&quot;)
+
+        importancias = pd.Series(
+            booster.feature_importance(importance_type=&quot;gain&quot;),
+            index=booster.feature_name(),
+        ).sort_values(ascending=False)
+        print(f&quot;\nTop 10 features por importancia ({nombre}, gain):&quot;)
+        print(importancias.head(10).to_string())
+
+    config = {
+        &quot;version&quot;: version,
+        &quot;tipo_modelo&quot;: TIPO_MODELO,
+        &quot;fecha_entrenamiento&quot;: datetime.datetime.now().isoformat(timespec=&quot;seconds&quot;),
+        &quot;dias_validacion&quot;: DIAS_VALIDACION,
+        &quot;lags&quot;: features.LAGS,
+        &quot;rolling_windows&quot;: features.ROLLING_WINDOWS,
+        &quot;model_features&quot;: features.MODEL_FEATURES,
+        &quot;hyperparams&quot;: resultado[&quot;hyperparams&quot;],
+        &quot;model_files&quot;: model_paths,
+    }
+    with open(os.path.join(vdir, &quot;config.json&quot;), &quot;w&quot;, encoding=&quot;utf-8&quot;) as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+
+    metrics = {&quot;mae_validacion&quot;: mae, &quot;rmse_validacion&quot;: rmse, &quot;wmape_validacion&quot;: w}
+    if &quot;diagnostico&quot; in resultado:
+        metrics.update(resultado[&quot;diagnostico&quot;])
+    with open(os.path.join(vdir, &quot;metrics.json&quot;), &quot;w&quot;, encoding=&quot;utf-8&quot;) as f:
+        json.dump(metrics, f, ensure_ascii=False, indent=2)
+
+    versioning.actualizar_resumen(version, {
+        &quot;tipo_modelo&quot;: TIPO_MODELO,
+        &quot;fecha&quot;: config[&quot;fecha_entrenamiento&quot;],
+        &quot;dias_validacion&quot;: DIAS_VALIDACION,
+        &quot;n_features&quot;: len(features.MODEL_FEATURES),
+        &quot;mae_validacion&quot;: round(mae, 4),
+        &quot;wmape_validacion&quot;: round(w, 4),
+    })
+
+    versioning.marcar_latest(version)
+    print(f&quot;\nVersión {version} lista y marcada como LATEST.&quot;)
+
+    return 0
+
+
+if __name__ == &quot;__main__&quot;:
+    raise SystemExit(main())
+</pre>
+<h3>sponser_etl/modeling/forecast.py</h3>
+<p class="ruta">Pronóstico recursivo día a día a partir de una versión entrenada</p>
+<pre class="codigo">&quot;&quot;&quot;Pronóstico recursivo de demanda a 100 días por producto, usando una versión
+entrenada del modelo (por defecto, la más reciente en versions/LATEST.txt).
+
+Uso: python forecast.py (después de correr train.py al menos una vez).
+Para cada día futuro (a partir del último día con datos reales), calcula
+features de calendario/evento/rezago usando el historial real + lo ya
+pronosticado, predice con el modelo guardado, y encadena el resultado
+como insumo del siguiente día.
+&quot;&quot;&quot;
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # sponser_etl/ (para load.py)
+
+import lightgbm as lgb
+import numpy as np
+import pandas as pd
+
+import features
+import load
+import versioning
+
+OUT_DIR = features.PROCESSED_DIR
+HORIZONTE_DIAS = 100
+
+
+def predecir(modelo: dict, fila: pd.DataFrame) -&gt; np.ndarray:
+    &quot;&quot;&quot;Predicción combinada, sin importar si `modelo` es hurdle o tweedie_directo,
+    con la calibración por producto ya aplicada (si existe). `fila` debe incluir
+    codigo_producto además de MODEL_FEATURES (la calibración es por producto).&quot;&quot;&quot;
+    X = fila[features.MODEL_FEATURES]
+    if modelo[&quot;tipo&quot;] == &quot;hurdle&quot;:
+        p = modelo[&quot;clasificacion&quot;].predict(X)
+        q = modelo[&quot;regresion&quot;].predict(X)
+        pred = p * q
+    else:
+        pred = modelo[&quot;regresion&quot;].predict(X)
+    return features.aplicar_calibracion(pred, fila, modelo.get(&quot;calibracion&quot;))
+
+
+def forecast_recursivo(
+    modelo: dict,
+    encoders: dict,
+    dias: int = HORIZONTE_DIAS,
+    historial_inicial: pd.DataFrame | None = None,
+) -&gt; pd.DataFrame:
+    &quot;&quot;&quot;Pronostica `dias` días recursivamente a partir del último día del historial.
+
+    Por defecto usa todo el historial real disponible (pronóstico &quot;hacia el futuro&quot;).
+    Se puede pasar `historial_inicial` truncado a una fecha de corte anterior para
+    hacer un backtest: el modelo pronostica recursivamente sin ver los datos reales
+    posteriores al corte, igual que pronosticaría hacia un futuro genuino.
+    &quot;&quot;&quot;
+    historial = historial_inicial if historial_inicial is not None else features.cargar_ventas_diarias()
+    eventos = features.cargar_eventos()
+    ultimo_dia_real = historial[&quot;fecha&quot;].max()
+
+    predicciones = []
+    for i in range(1, dias + 1):
+        fecha_objetivo = ultimo_dia_real + pd.Timedelta(days=i)
+        panel = features.construir_panel(ventas=historial, eventos=eventos, fecha_max=fecha_objetivo)
+        panel = features.aplicar_encoders(panel, encoders)
+
+        fila = panel[panel[&quot;fecha&quot;] == fecha_objetivo].copy()
+        pred = predecir(modelo, fila)
+        fila[&quot;unidades_vendidas&quot;] = pred
+
+        predicciones.append(fila[[&quot;fecha&quot;, &quot;codigo_producto&quot;, &quot;unidades_vendidas&quot;]].rename(
+            columns={&quot;unidades_vendidas&quot;: &quot;unidades_pronosticadas&quot;}
+        ))
+        historial = pd.concat(
+            [historial, fila[[&quot;fecha&quot;, &quot;codigo_producto&quot;, &quot;unidades_vendidas&quot;]]],
+            ignore_index=True,
+        )
+
+        if i % 10 == 0 or i == dias:
+            print(f&quot;  pronosticado día {i}/{dias} ({fecha_objetivo.date()})&quot;)
+
+    return pd.concat(predicciones, ignore_index=True)
+
+
+def cargar_modelo(version: str | None = None):
+    &quot;&quot;&quot;Carga la versión pedida (o LATEST) y devuelve (version, modelo, encoders).
+
+    `modelo` es un dict {&quot;tipo&quot;: ..., &quot;regresion&quot;: Booster} para tweedie_directo,
+    o {&quot;tipo&quot;: &quot;hurdle&quot;, &quot;clasificacion&quot;: Booster, &quot;regresion&quot;: Booster} para hurdle
+    — soporta versiones antiguas (v1-v4, sin config.json con tipo_modelo) asumiendo
+    tweedie_directo con model_lightgbm.txt.
+    &quot;&quot;&quot;
+    version = versioning.resolver_version(version)
+    vdir = versioning.version_dir(version)
+
+    config_path = os.path.join(vdir, &quot;config.json&quot;)
+    tipo = &quot;tweedie_directo&quot;
+    if os.path.exists(config_path):
+        with open(config_path, &quot;r&quot;, encoding=&quot;utf-8&quot;) as f:
+            tipo = json.load(f).get(&quot;tipo_modelo&quot;, &quot;tweedie_directo&quot;)
+
+    encoders = features.cargar_encoders(os.path.join(vdir, &quot;encoders.json&quot;))
+
+    if tipo == &quot;hurdle&quot;:
+        clas_path = os.path.join(vdir, &quot;model_clasificacion.txt&quot;)
+        reg_path = os.path.join(vdir, &quot;model_regresion.txt&quot;)
+        if not (os.path.exists(clas_path) and os.path.exists(reg_path)):
+            raise FileNotFoundError(f&quot;Faltan archivos de modelo hurdle de la versión {version} en {vdir}.&quot;)
+        modelo = {
+            &quot;tipo&quot;: &quot;hurdle&quot;,
+            &quot;clasificacion&quot;: lgb.Booster(model_file=clas_path),
+            &quot;regresion&quot;: lgb.Booster(model_file=reg_path),
+        }
+    else:
+        model_path = os.path.join(vdir, &quot;model_lightgbm.txt&quot;)
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f&quot;No se encontró el modelo de la versión {version} en {model_path}.&quot;)
+        modelo = {&quot;tipo&quot;: &quot;tweedie_directo&quot;, &quot;regresion&quot;: lgb.Booster(model_file=model_path)}
+
+    modelo[&quot;calibracion&quot;] = features.cargar_calibracion(os.path.join(vdir, &quot;calibracion.json&quot;))
+
+    return version, modelo, encoders
+
+
+def main() -&gt; int:
+    version, modelo, encoders = cargar_modelo()
+    print(f&quot;Usando versión: {version} (tipo: {modelo[&#x27;tipo&#x27;]})&quot;)
+
+    print(f&quot;Pronosticando {HORIZONTE_DIAS} días hacia adelante...&quot;)
+    forecast_df = forecast_recursivo(modelo, encoders, dias=HORIZONTE_DIAS)
+
+    resumen_sku = (
+        forecast_df.groupby(&quot;codigo_producto&quot;)[&quot;unidades_pronosticadas&quot;]
+        .mean()
+        .reset_index()
+        .rename(columns={&quot;unidades_pronosticadas&quot;: &quot;daily_demand&quot;})
+        .sort_values(&quot;daily_demand&quot;, ascending=False)
+    )
+
+    load.guardar_tablas(
+        {
+            &quot;forecast_demanda_producto&quot;: forecast_df,
+            &quot;demanda_promedio_sku&quot;: resumen_sku,
+        },
+        OUT_DIR,
+    )
+
+    print(f&quot;\nforecast_demanda_producto.csv: {len(forecast_df):,} filas -&gt; {OUT_DIR}&quot;)
+    print(f&quot;demanda_promedio_sku.csv: {len(resumen_sku):,} filas -&gt; {OUT_DIR}&quot;)
+    print(f&quot;Rango pronosticado: {forecast_df[&#x27;fecha&#x27;].min().date()} -&gt; {forecast_df[&#x27;fecha&#x27;].max().date()}&quot;)
+    print(f&quot;(generado con la versión del modelo: {version})&quot;)
+
+    return 0
+
+
+if __name__ == &quot;__main__&quot;:
+    raise SystemExit(main())
+</pre>
+<h3>sponser_etl/modeling/backtest.py</h3>
+<p class="ruta">Validación del pronóstico recursivo contra venta real ya ocurrida</p>
+<pre class="codigo">&quot;&quot;&quot;Backtest: mide qué tan preciso es el pronóstico recursivo comparándolo contra
+ventas reales que ya ocurrieron (no contra el futuro).
+
+Usa una versión ya entrenada (por defecto la más reciente) — train.py la entrenó
+excluyendo los últimos DIAS_BACKTEST días reales — y corre exactamente el mismo
+procedimiento recursivo de forecast.py, pero apuntado a ese período que ya
+conocemos, para comparar predicción vs. venta real día por día, mes por mes y
+producto por producto. Los resultados quedan guardados dentro de la carpeta de
+la versión evaluada (versions/vN/), y el resumen global en versions/summary.csv.
+
+Uso: python backtest.py (después de correr train.py)
+&quot;&quot;&quot;
+
+from __future__ import annotations
+
+import os
+
+import lightgbm as lgb
+import numpy as np
+import pandas as pd
+
+import features
+import forecast
+import versioning
+
+DIAS_BACKTEST = 150  # debe coincidir con DIAS_VALIDACION en train.py
+
+
+def wmape(y_true: np.ndarray, y_pred: np.ndarray) -&gt; float:
+    return float(np.abs(y_true - y_pred).sum() / max(np.abs(y_true).sum(), 1e-9))
+
+
+def cargar_descripciones() -&gt; pd.Series:
+    &quot;&quot;&quot;codigo_producto -&gt; descripción más frecuente en ventas_detalle.csv.&quot;&quot;&quot;
+    ventas = pd.read_csv(
+        os.path.join(features.PROCESSED_DIR, &quot;ventas_detalle.csv&quot;),
+        dtype={&quot;codigo_producto&quot;: str},
+        usecols=[&quot;codigo_producto&quot;, &quot;item_descripcion&quot;],
+    )
+    ventas[&quot;descripcion&quot;] = ventas[&quot;item_descripcion&quot;].astype(str).str.replace(
+        r&quot;^\s*\d+\s*&quot;, &quot;&quot;, regex=True
+    ).str.strip()
+    return ventas.groupby(&quot;codigo_producto&quot;)[&quot;descripcion&quot;].agg(lambda s: s.mode().iat[0])
+
+
+def main() -&gt; int:
+    version, modelo, encoders = forecast.cargar_modelo()
+    vdir = versioning.version_dir(version)
+    print(f&quot;Backtesteando versión: {version} (tipo: {modelo[&#x27;tipo&#x27;]})&quot;)
+
+    ventas = features.cargar_ventas_diarias()
+    fecha_max = ventas[&quot;fecha&quot;].max()
+    cutoff = fecha_max - pd.Timedelta(days=DIAS_BACKTEST - 1)
+
+    historial_train = ventas[ventas[&quot;fecha&quot;] &lt; cutoff].copy()
+    print(f&quot;Pronosticando recursivamente {DIAS_BACKTEST} días desde {cutoff.date()} &quot;
+          f&quot;hasta {fecha_max.date()} (la versión {version} NO vio datos reales de ese período al entrenar)...&quot;)
+
+    pred_df = forecast.forecast_recursivo(
+        modelo, encoders, dias=DIAS_BACKTEST, historial_inicial=historial_train
+    )
+
+    productos = historial_train[&quot;codigo_producto&quot;].unique()
+    fechas_val = pd.date_range(cutoff, fecha_max, freq=&quot;D&quot;)
+    idx = pd.MultiIndex.from_product([productos, fechas_val], names=[&quot;codigo_producto&quot;, &quot;fecha&quot;])
+    real_df = pd.DataFrame(index=idx).reset_index().merge(ventas, on=[&quot;codigo_producto&quot;, &quot;fecha&quot;], how=&quot;left&quot;)
+    real_df[&quot;unidades_vendidas&quot;] = real_df[&quot;unidades_vendidas&quot;].fillna(0.0)
+
+    comp = pred_df.merge(real_df, on=[&quot;fecha&quot;, &quot;codigo_producto&quot;], how=&quot;inner&quot;)
+    comp[&quot;error&quot;] = comp[&quot;unidades_pronosticadas&quot;] - comp[&quot;unidades_vendidas&quot;]
+    comp[&quot;dia_horizonte&quot;] = (comp[&quot;fecha&quot;] - cutoff).dt.days + 1
+
+    mae = comp[&quot;error&quot;].abs().mean()
+    rmse = np.sqrt((comp[&quot;error&quot;] ** 2).mean())
+    w = wmape(comp[&quot;unidades_vendidas&quot;].to_numpy(), comp[&quot;unidades_pronosticadas&quot;].to_numpy())
+    sesgo = comp[&quot;error&quot;].mean()
+    total_real = comp[&quot;unidades_vendidas&quot;].sum()
+    total_pred = comp[&quot;unidades_pronosticadas&quot;].sum()
+
+    print(f&quot;\n=== Backtest recursivo ({DIAS_BACKTEST} días, comparado contra venta real) ===&quot;)
+    print(f&quot;  Filas comparadas: {len(comp):,} (producto x día)&quot;)
+    print(f&quot;  MAE:   {mae:.3f} unidades/producto/día&quot;)
+    print(f&quot;  RMSE:  {rmse:.3f}&quot;)
+    print(f&quot;  WMAPE: {w:.1%}&quot;)
+    print(f&quot;  Sesgo promedio: {sesgo:+.3f} unidades/producto/día ({&#x27;SUBESTIMA&#x27; if sesgo &lt; 0 else &#x27;SOBRESTIMA&#x27;})&quot;)
+    print(f&quot;  Total real en el período:         {total_real:,.0f} unidades&quot;)
+    print(f&quot;  Total pronosticado en el período: {total_pred:,.0f} unidades ({total_pred / total_real:.1%} del real)&quot;)
+
+    print(&quot;\n--- Precisión por tramo del horizonte (agrupado en rangos de días; un solo día suelto puede\n&quot;
+          &quot;    tener venta real ~0 entre 175 productos y desestabilizar el WMAPE) ---&quot;)
+    tramos = [(1, 7), (8, 14), (15, 30), (31, 60), (61, 90), (91, 120), (121, 150)]
+    tramos = [t for t in tramos if t[0] &lt;= DIAS_BACKTEST]
+    comp[&quot;tramo&quot;] = pd.cut(
+        comp[&quot;dia_horizonte&quot;],
+        bins=[t[0] - 1 for t in tramos] + [min(tramos[-1][1], DIAS_BACKTEST)],
+        labels=[f&quot;días {t[0]}-{min(t[1], DIAS_BACKTEST)}&quot; for t in tramos],
+    )
+    por_tramo = comp.groupby(&quot;tramo&quot;, observed=True).apply(
+        lambda g: pd.Series({
+            &quot;real&quot;: g[&quot;unidades_vendidas&quot;].sum(),
+            &quot;pronosticado&quot;: g[&quot;unidades_pronosticadas&quot;].sum(),
+            &quot;wmape&quot;: wmape(g[&quot;unidades_vendidas&quot;].to_numpy(), g[&quot;unidades_pronosticadas&quot;].to_numpy()),
+        }),
+        include_groups=False,
+    )
+    print(por_tramo.to_string(float_format=lambda x: f&quot;{x:.3f}&quot;))
+
+    print(&quot;\n--- Top 10 productos de mayor venta real: real vs pronosticado (total del período) ---&quot;)
+    por_producto = comp.groupby(&quot;codigo_producto&quot;).agg(
+        real=(&quot;unidades_vendidas&quot;, &quot;sum&quot;),
+        pronosticado=(&quot;unidades_pronosticadas&quot;, &quot;sum&quot;),
+    )
+    por_producto[&quot;error_pct&quot;] = (
+        (por_producto[&quot;pronosticado&quot;] - por_producto[&quot;real&quot;]) / por_producto[&quot;real&quot;].replace(0, np.nan)
+    )
+    top10 = por_producto.sort_values(&quot;real&quot;, ascending=False).head(10)
+    print(top10.to_string(float_format=lambda x: f&quot;{x:.2f}&quot;))
+
+    por_producto.reset_index().sort_values(&quot;real&quot;, ascending=False).to_csv(
+        os.path.join(vdir, &quot;backtest_resultados.csv&quot;), index=False
+    )
+
+    # --- Agregación mensual ---
+    comp[&quot;mes&quot;] = comp[&quot;fecha&quot;].dt.to_period(&quot;M&quot;).astype(str)
+    descripciones = cargar_descripciones()
+
+    mensual_producto = comp.groupby([&quot;codigo_producto&quot;, &quot;mes&quot;]).agg(
+        real=(&quot;unidades_vendidas&quot;, &quot;sum&quot;),
+        pronosticado=(&quot;unidades_pronosticadas&quot;, &quot;sum&quot;),
+    ).reset_index()
+    mensual_producto[&quot;descripcion&quot;] = mensual_producto[&quot;codigo_producto&quot;].map(descripciones).fillna(&quot;&quot;)
+    mensual_producto[&quot;error_pct&quot;] = (
+        (mensual_producto[&quot;pronosticado&quot;] - mensual_producto[&quot;real&quot;]) / mensual_producto[&quot;real&quot;].replace(0, np.nan)
+    )
+    mensual_producto = mensual_producto[
+        [&quot;codigo_producto&quot;, &quot;descripcion&quot;, &quot;mes&quot;, &quot;real&quot;, &quot;pronosticado&quot;, &quot;error_pct&quot;]
+    ].sort_values([&quot;mes&quot;, &quot;real&quot;], ascending=[True, False])
+
+    mensual_total = comp.groupby(&quot;mes&quot;).apply(
+        lambda g: pd.Series({
+            &quot;real&quot;: g[&quot;unidades_vendidas&quot;].sum(),
+            &quot;pronosticado&quot;: g[&quot;unidades_pronosticadas&quot;].sum(),
+            &quot;wmape&quot;: wmape(g[&quot;unidades_vendidas&quot;].to_numpy(), g[&quot;unidades_pronosticadas&quot;].to_numpy()),
+        }),
+        include_groups=False,
+    ).reset_index()
+    mensual_total[&quot;error_pct&quot;] = (mensual_total[&quot;pronosticado&quot;] - mensual_total[&quot;real&quot;]) / mensual_total[&quot;real&quot;]
+
+    print(&quot;\n=== Exactitud mensual, total compañía ===&quot;)
+    print(mensual_total.to_string(index=False, float_format=lambda x: f&quot;{x:.3f}&quot;))
+
+    print(&quot;\n=== Distribución del error por combinación SKU-mes ===&quot;)
+    valid = mensual_producto.dropna(subset=[&quot;error_pct&quot;]).copy()
+    valid[&quot;abs_error_pct&quot;] = valid[&quot;error_pct&quot;].abs()
+    bandas = pd.cut(
+        valid[&quot;abs_error_pct&quot;],
+        bins=[0, 0.20, 0.50, 1.0, np.inf],
+        labels=[&quot;dentro de ±20%&quot;, &quot;±20% a ±50%&quot;, &quot;±50% a ±100%&quot;, &quot;peor de ±100%&quot;],
+    )
+    resumen_bandas = bandas.value_counts().sort_index()
+    for etiqueta, cuenta in resumen_bandas.items():
+        print(f&quot;  {etiqueta}: {cuenta} de {len(valid)} combinaciones SKU-mes ({cuenta / len(valid):.1%})&quot;)
+
+    mensual_producto.to_csv(os.path.join(vdir, &quot;backtest_mensual_producto.csv&quot;), index=False)
+    mensual_total.to_csv(os.path.join(vdir, &quot;backtest_mensual_total.csv&quot;), index=False)
+    print(f&quot;\nResultados del backtest guardados en: {vdir}&quot;)
+
+    pct_dentro_20 = float((valid[&quot;abs_error_pct&quot;] &lt;= 0.20).mean())
+    versioning.actualizar_resumen(version, {
+        &quot;dias_backtest&quot;: DIAS_BACKTEST,
+        &quot;wmape_backtest&quot;: round(w, 4),
+        &quot;sesgo_backtest&quot;: round(sesgo, 4),
+        &quot;pct_total_real_backtest&quot;: round(total_pred / total_real, 4),
+        &quot;pct_sku_mes_dentro_20pct&quot;: round(pct_dentro_20, 4),
+    })
+    print(f&quot;\nResumen de versiones actualizado en: {versioning.SUMMARY_PATH}&quot;)
+
+    return 0
+
+
+if __name__ == &quot;__main__&quot;:
+    raise SystemExit(main())
+</pre>
+<h3>sponser_etl/modeling/versioning.py</h3>
+<p class="ruta">Gestión de versiones del modelo (versions/vN, LATEST.txt)</p>
+<pre class="codigo">&quot;&quot;&quot;Utilidades para manejar versiones del modelo entrenado.
+
+Cada corrida de train.py crea una carpeta nueva versions/vN/ (nunca sobreescribe
+una anterior), con su modelo, encoders, configuración y métricas. versions/LATEST.txt
+apunta a la más reciente, para que forecast.py y backtest.py la usen por defecto.
+&quot;&quot;&quot;
+
+from __future__ import annotations
+
+import os
+import re
+
+import pandas as pd
+
+VERSIONS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), &quot;versions&quot;)
+LATEST_PATH = os.path.join(VERSIONS_DIR, &quot;LATEST.txt&quot;)
+SUMMARY_PATH = os.path.join(VERSIONS_DIR, &quot;summary.csv&quot;)
+
+
+def listar_versiones() -&gt; list[str]:
+    if not os.path.isdir(VERSIONS_DIR):
+        return []
+    vs = [
+        d for d in os.listdir(VERSIONS_DIR)
+        if re.fullmatch(r&quot;v\d+&quot;, d) and os.path.isdir(os.path.join(VERSIONS_DIR, d))
+    ]
+    return sorted(vs, key=lambda v: int(v[1:]))
+
+
+def siguiente_version() -&gt; str:
+    vs = listar_versiones()
+    if not vs:
+        return &quot;v1&quot;
+    return f&quot;v{int(vs[-1][1:]) + 1}&quot;
+
+
+def version_dir(version: str) -&gt; str:
+    d = os.path.join(VERSIONS_DIR, version)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def marcar_latest(version: str) -&gt; None:
+    os.makedirs(VERSIONS_DIR, exist_ok=True)
+    with open(LATEST_PATH, &quot;w&quot;, encoding=&quot;utf-8&quot;) as f:
+        f.write(version)
+
+
+def resolver_version(version: str | None = None) -&gt; str:
+    &quot;&quot;&quot;Si version es None, devuelve la última entrenada (versions/LATEST.txt).&quot;&quot;&quot;
+    if version:
+        return version
+    if not os.path.exists(LATEST_PATH):
+        raise FileNotFoundError(&quot;No hay ninguna versión entrenada todavía. Corre train.py primero.&quot;)
+    with open(LATEST_PATH, &quot;r&quot;, encoding=&quot;utf-8&quot;) as f:
+        return f.read().strip()
+
+
+def actualizar_resumen(version: str, columnas: dict) -&gt; None:
+    &quot;&quot;&quot;Agrega o actualiza (upsert) la fila de `version` en versions/summary.csv.&quot;&quot;&quot;
+    os.makedirs(VERSIONS_DIR, exist_ok=True)
+    if os.path.exists(SUMMARY_PATH):
+        df = pd.read_csv(SUMMARY_PATH)
+    else:
+        df = pd.DataFrame(columns=[&quot;version&quot;])
+
+    if &quot;version&quot; not in df.columns:
+        df[&quot;version&quot;] = []
+
+    fila = {&quot;version&quot;: version, **columnas}
+    if version in df[&quot;version&quot;].astype(str).values:
+        idx = df.index[df[&quot;version&quot;].astype(str) == version][0]
+        for k, v in fila.items():
+            df.loc[idx, k] = v
+    else:
+        df = pd.concat([df, pd.DataFrame([fila])], ignore_index=True)
+
+    df.to_csv(SUMMARY_PATH, index=False)
+</pre>
+<h3>sponser_etl/replenishment/fifo.py</h3>
+<p class="ruta">Simulación FIFO de consumo de inventario y ofertas de proveedor</p>
+<pre class="codigo">&quot;&quot;&quot;Simulación FIFO de consumo de inventario y asignación de ofertas de proveedor,
+priorizando siempre lo que vence más pronto, para minimizar pérdida por vencimiento.
+&quot;&quot;&quot;
+
+from __future__ import annotations
+
+from datetime import date, timedelta
+
+import pandas as pd
+
+
+def ajustar_a_moq_y_multiple(qty: float, moq: float, multiple: float) -&gt; int:
+    if qty &lt;= 0:
+        return 0
+    qty = max(int(qty), int(moq or 0))
+    m = int(multiple or 0)
+    if m &gt; 0 and qty % m != 0:
+        qty += (m - qty % m)
+    return int(qty)
+
+
+def rango_fechas(inicio: date, fin: date):
+    dias = (fin - inicio).days
+    for d in range(dias + 1):
+        yield inicio + timedelta(days=d)
+
+
+def construir_horizonte(sku_inv: pd.DataFrame, sku_ofertas: pd.DataFrame, lt: int, cov: int, saf: int, hoy: date):
+    base_fin = hoy + timedelta(days=max(0, int(lt) + int(cov) + int(saf)))
+    max_exp_inv = max(sku_inv[&quot;expiry_date&quot;]) if not sku_inv.empty else base_fin
+    max_exp_of = max(sku_ofertas[&quot;expiry_date&quot;]) if not sku_ofertas.empty else base_fin
+    fin = max(base_fin, max_exp_inv, max_exp_of)
+    fin = min(fin, hoy + timedelta(days=540))  # tope 18 meses
+    return hoy, fin
+
+
+def consumir_fifo_solo_inventario(demanda_diaria: pd.Series, sku_inv: pd.DataFrame, start_date: date, end_date: date):
+    &quot;&quot;&quot;demanda_diaria: serie indexada por fecha con la curva día a día del
+    pronóstico (no un promedio aplanado, para no perder picos por evento que
+    puedan definir si un lote vence antes de venderse). Ver run.py.&quot;&quot;&quot;
+    fechas = list(rango_fechas(start_date, end_date))
+    residual = pd.Series([float(demanda_diaria.get(f, 0.0)) for f in fechas], index=fechas, dtype=float)
+    servido = pd.Series([0] * len(fechas), index=fechas, dtype=float)
+
+    if sku_inv.empty or residual.sum() &lt;= 0:
+        return residual, 0, servido
+
+    lots = sku_inv.sort_values(&quot;expiry_date&quot;).copy()
+    lots_state = [{&quot;expiry&quot;: r.expiry_date, &quot;qty&quot;: float(r.qty)} for _, r in lots.iterrows()]
+
+    for i, fecha in enumerate(fechas):
+        demanda = residual.iloc[i]
+        if demanda &lt;= 0:
+            continue
+        for lot in lots_state:
+            if demanda &lt;= 0:
+                break
+            if lot[&quot;qty&quot;] &lt;= 0:
+                continue
+            if lot[&quot;expiry&quot;] &lt; fecha:
+                continue
+            usar = min(lot[&quot;qty&quot;], demanda)
+            lot[&quot;qty&quot;] -= usar
+            demanda -= usar
+            servido.iloc[i] += usar
+        residual.iloc[i] = demanda
+
+    expirado = 0
+    fin_h = end_date
+    for lot in lots_state:
+        if lot[&quot;qty&quot;] &gt; 0 and lot[&quot;expiry&quot;] &lt;= fin_h:
+            expirado += lot[&quot;qty&quot;]
+            lot[&quot;qty&quot;] = 0
+
+    return residual, float(expirado), servido
+
+
+def asignar_ofertas_a_residual(residual_series: pd.Series, opciones: pd.DataFrame):
+    &quot;&quot;&quot;Cubre la demanda residual (no cubierta por inventario actual) con ofertas
+    de proveedor ya negociadas, priorizando la que vence más pronto (igual criterio
+    que consumir_fifo_solo_inventario), y solo desde su fecha de llegada.
+
+    Devuelve: (asignado, residual_restante, riesgo)
+      - asignado: dict option_id -&gt; unidades consumidas por la demanda.
+      - residual_restante: pd.Series, demanda que sigue sin cubrir después de aplicar ofertas.
+      - riesgo: dict option_id -&gt; {&quot;at_risk&quot;: unidades de la oferta que quedaron sin usar
+        al llegar su vencimiento (desperdicio potencial)}.
+    &quot;&quot;&quot;
+    residual = residual_series.copy()
+    asignado = {opt: 0.0 for opt in opciones[&quot;option_id&quot;]}
+    riesgo = {opt: {&quot;at_risk&quot;: 0.0} for opt in opciones[&quot;option_id&quot;]}
+
+    if opciones.empty:
+        return asignado, residual, riesgo
+
+    opciones_sorted = opciones.sort_values(&quot;expiry_date&quot;).copy()
+
+    for _, row in opciones_sorted.iterrows():
+        opt_id = row[&quot;option_id&quot;]
+        arr = row[&quot;arrival_date&quot;]
+        exp = row[&quot;expiry_date&quot;]
+        disponible = float(row[&quot;available_qty&quot;])
+
+        for fecha in residual.index:
+            if disponible &lt;= 0:
+                break
+            if fecha &lt; arr or fecha &gt; exp:
+                continue
+            demanda = residual.loc[fecha]
+            if demanda &lt;= 0:
+                continue
+            usar = min(disponible, demanda)
+            residual.loc[fecha] -= usar
+            disponible -= usar
+            asignado[opt_id] += usar
+
+        if disponible &gt; 0:
+            riesgo[opt_id][&quot;at_risk&quot;] = disponible
+
+    return asignado, residual, riesgo
+</pre>
+<h3>sponser_etl/replenishment/run.py</h3>
+<p class="ruta">Orquestador de la recomendación de compra</p>
+<pre class="codigo">&quot;&quot;&quot;Orquestador: demanda pronosticada + inventario real + parámetros de compra
+-&gt; recomendación de compra por producto (FIFO anti-vencimiento).
+
+Uso: python run.py (desde sponser_etl/replenishment/)
+&quot;&quot;&quot;
+
+from __future__ import annotations
+
+import os
+import sys
+
+import pandas as pd
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # sponser_etl/ (para load.py)
+
+import load
+import fifo
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # sponser_etl/
+PROCESSED_DIR = os.path.join(BASE_DIR, &quot;data&quot;, &quot;processed&quot;)
+
+ADVERTENCIA = &quot;&quot;&quot;
+============================================================
+ADVERTENCIA - revisar antes de usar para decisiones de compra:
+  1. El pronóstico (modelo hurdle, calibrado por tercil de
+     volumen) tiene un margen de error real a nivel de SKU
+     individual, mayor cuanto más chico es el volumen del
+     producto — ver modeling/versions/summary.csv y
+     versions/LATEST/backtest_resultados.csv (LATEST.txt indica
+     cuál es la versión vigente) antes de confiar en un número
+     exacto por SKU chico.
+  2. sku_config.csv arrancó con valores PLACEHOLDER de lead
+     time / MOQ / múltiplo (no son datos reales del proveedor
+     Sponser) — corrígelos ahí antes de confiar en el resultado.
+  3. ofertas_proveedor.csv está vacío: se asume que no hay
+     ningún pedido ya en camino: toda la demanda no cubierta
+     por el inventario actual aparece como &quot;a pedir&quot;.
+============================================================
+&quot;&quot;&quot;
+
+
+def cargar_as_of_date():
+    &quot;&quot;&quot;Última fecha con venta real registrada -- misma ancla temporal que usa
+    sponser_api (data_access.get_as_of_date()) para todo el resto del tablero.&quot;&quot;&quot;
+    ventas = pd.read_csv(
+        os.path.join(PROCESSED_DIR, &quot;ventas_diarias_producto.csv&quot;), parse_dates=[&quot;fecha&quot;]
+    )
+    return ventas[&quot;fecha&quot;].max().date()
+
+
+def cargar_inputs():
+    demanda = pd.read_csv(
+        os.path.join(PROCESSED_DIR, &quot;demanda_promedio_sku.csv&quot;), dtype={&quot;codigo_producto&quot;: str}
+    )
+
+    # Curva día a día del pronóstico; demanda_promedio_sku.csv (arriba) es su
+    # promedio, usado como respaldo (ver construir_demanda_diaria).
+    forecast = pd.read_csv(
+        os.path.join(PROCESSED_DIR, &quot;forecast_demanda_producto.csv&quot;),
+        dtype={&quot;codigo_producto&quot;: str}, parse_dates=[&quot;fecha&quot;],
+    )
+    forecast[&quot;fecha&quot;] = forecast[&quot;fecha&quot;].dt.date
+    forecast_por_sku = {
+        codigo: grupo.set_index(&quot;fecha&quot;)[&quot;unidades_pronosticadas&quot;]
+        for codigo, grupo in forecast.groupby(&quot;codigo_producto&quot;)
+    }
+
+    inv = pd.read_csv(
+        os.path.join(PROCESSED_DIR, &quot;inventario_lotes.csv&quot;), dtype={&quot;codigo_producto&quot;: str}
+    )
+    inv = inv.rename(columns={&quot;codigo_producto&quot;: &quot;sku&quot;, &quot;lote_id&quot;: &quot;lot_id&quot;, &quot;cantidad&quot;: &quot;qty&quot;})
+    inv[&quot;expiry_date&quot;] = pd.to_datetime(inv[&quot;fecha_vencimiento&quot;], errors=&quot;coerce&quot;)
+    fecha_lejana = pd.Timestamp.today() + pd.Timedelta(days=3650)
+    inv[&quot;expiry_date&quot;] = inv[&quot;expiry_date&quot;].fillna(fecha_lejana).dt.date
+
+    cfg = pd.read_csv(os.path.join(BASE_DIR, &quot;sku_config.csv&quot;), dtype={&quot;codigo_producto&quot;: str})
+
+    ofertas = pd.read_csv(os.path.join(BASE_DIR, &quot;ofertas_proveedor.csv&quot;), dtype={&quot;sku&quot;: str})
+    if not ofertas.empty:
+        ofertas[&quot;arrival_date&quot;] = pd.to_datetime(ofertas[&quot;arrival_date&quot;]).dt.date
+        ofertas[&quot;expiry_date&quot;] = pd.to_datetime(ofertas[&quot;expiry_date&quot;]).dt.date
+
+    return demanda, forecast_por_sku, inv, cfg, ofertas
+
+
+def cargar_descripciones() -&gt; pd.Series:
+    &quot;&quot;&quot;codigo_producto -&gt; descripción más frecuente en ventas_detalle.csv (cubre
+    los 175 productos con demanda, a diferencia de inventario_lotes.csv que solo
+    tiene descripción para los que además tienen stock registrado).&quot;&quot;&quot;
+    ventas = pd.read_csv(
+        os.path.join(PROCESSED_DIR, &quot;ventas_detalle.csv&quot;),
+        dtype={&quot;codigo_producto&quot;: str},
+        usecols=[&quot;codigo_producto&quot;, &quot;item_descripcion&quot;],
+    )
+    ventas[&quot;descripcion&quot;] = ventas[&quot;item_descripcion&quot;].astype(str).str.replace(
+        r&quot;^\s*\d+\s*&quot;, &quot;&quot;, regex=True
+    ).str.strip()
+    return ventas.groupby(&quot;codigo_producto&quot;)[&quot;descripcion&quot;].agg(lambda s: s.mode().iat[0])
+
+
+def construir_demanda_diaria(daily_avg: float, curva: pd.Series | None, start, end) -&gt; pd.Series:
+    &quot;&quot;&quot;Serie día a día del horizonte de compra: usa la curva pronosticada
+    donde exista, y daily_avg de respaldo para los días fuera de ese rango
+    (el horizonte puede extenderse más que el pronóstico -- ver
+    fifo.construir_horizonte).&quot;&quot;&quot;
+    fechas = list(fifo.rango_fechas(start, end))
+    if curva is None or curva.empty:
+        return pd.Series([daily_avg] * len(fechas), index=fechas, dtype=float)
+    valores = [float(curva[f]) if f in curva.index else daily_avg for f in fechas]
+    return pd.Series(valores, index=fechas, dtype=float)
+
+
+def calcular_recomendacion(
+    demanda: pd.DataFrame, forecast_por_sku: dict, inv: pd.DataFrame, cfg: pd.DataFrame, ofertas: pd.DataFrame, hoy,
+) -&gt; pd.DataFrame:
+    cfg_idx = cfg.set_index(&quot;codigo_producto&quot;)
+    filas = []
+
+    for _, row in demanda.iterrows():
+        codigo = row[&quot;codigo_producto&quot;]
+        daily_avg = float(row[&quot;daily_demand&quot;])
+
+        if codigo in cfg_idx.index:
+            params = cfg_idx.loc[codigo]
+            lt, cov, saf = params[&quot;lead_time_days&quot;], params[&quot;coverage_days&quot;], params[&quot;safety_days&quot;]
+            moq, multiple = params[&quot;moq&quot;], params[&quot;multiple&quot;]
+        else:
+            lt, cov, saf, moq, multiple = 21, 30, 7, 1, 1
+
+        sku_inv = inv[inv[&quot;sku&quot;] == codigo][[&quot;lot_id&quot;, &quot;qty&quot;, &quot;expiry_date&quot;]]
+        sku_ofertas = ofertas[ofertas[&quot;sku&quot;] == codigo] if not ofertas.empty else ofertas
+
+        start, end = fifo.construir_horizonte(sku_inv, sku_ofertas, lt, cov, saf, hoy)
+        demanda_diaria = construir_demanda_diaria(daily_avg, forecast_por_sku.get(codigo), start, end)
+        residual, expirado, _servido = fifo.consumir_fifo_solo_inventario(demanda_diaria, sku_inv, start, end)
+        asignado, residual_final, riesgo = fifo.asignar_ofertas_a_residual(residual, sku_ofertas)
+
+        demanda_no_cubierta = float(residual_final.clip(lower=0).sum())
+        unidades_a_pedir = fifo.ajustar_a_moq_y_multiple(demanda_no_cubierta, moq, multiple)
+        riesgo_ofertas = sum(r[&quot;at_risk&quot;] for r in riesgo.values())
+
+        filas.append({
+            &quot;codigo_producto&quot;: codigo,
+            &quot;daily_demand&quot;: daily_avg,
+            &quot;dias_horizonte&quot;: (end - start).days + 1,
+            &quot;unidades_en_inventario&quot;: float(sku_inv[&quot;qty&quot;].sum()) if not sku_inv.empty else 0.0,
+            &quot;unidades_en_riesgo_vencimiento&quot;: float(expirado) + float(riesgo_ofertas),
+            &quot;unidades_cubiertas_por_ofertas&quot;: float(sum(asignado.values())),
+            &quot;unidades_a_pedir&quot;: unidades_a_pedir,
+        })
+
+    return pd.DataFrame(filas).sort_values(&quot;unidades_a_pedir&quot;, ascending=False).reset_index(drop=True)
+
+
+def main() -&gt; int:
+    print(ADVERTENCIA)
+
+    demanda, forecast_por_sku, inv, cfg, ofertas = cargar_inputs()
+    hoy = cargar_as_of_date()
+    print(f&quot;Calculando recomendación de compra para {len(demanda)} productos (referencia: hoy = {hoy}, última venta real registrada)...&quot;)
+
+    recomendacion = calcular_recomendacion(demanda, forecast_por_sku, inv, cfg, ofertas, hoy)
+
+    descripciones = cargar_descripciones()
+    recomendacion.insert(1, &quot;descripcion&quot;, recomendacion[&quot;codigo_producto&quot;].map(descripciones).fillna(&quot;&quot;))
+
+    load.guardar_tablas({&quot;recomendacion_compra&quot;: recomendacion}, PROCESSED_DIR)
+
+    print(f&quot;\nrecomendacion_compra.csv: {len(recomendacion):,} filas -&gt; {PROCESSED_DIR}&quot;)
+    print(f&quot;Productos con unidades_a_pedir &gt; 0: {(recomendacion[&#x27;unidades_a_pedir&#x27;] &gt; 0).sum()}&quot;)
+    print(f&quot;Total unidades a pedir (todos los productos): {recomendacion[&#x27;unidades_a_pedir&#x27;].sum():,.0f}&quot;)
+
+    return 0
+
+
+if __name__ == &quot;__main__&quot;:
+    raise SystemExit(main())
+</pre>
+</div>
 
 </body>
 </html>

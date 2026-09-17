@@ -10,6 +10,7 @@ como insumo del siguiente día.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 
@@ -96,7 +97,6 @@ def cargar_modelo(version: str | None = None):
     config_path = os.path.join(vdir, "config.json")
     tipo = "tweedie_directo"
     if os.path.exists(config_path):
-        import json
         with open(config_path, "r", encoding="utf-8") as f:
             tipo = json.load(f).get("tipo_modelo", "tweedie_directo")
 

@@ -175,16 +175,8 @@ def cargar_encoders(path: str) -> dict:
         return json.load(f)
 
 
-# --- Calibración por producto (post-modelo, ver train.py/forecast.py) ---
-#
-# Se calcula UNA VEZ en train.py a partir de un backtest recursivo real (no de
-# validación de un solo paso, que no refleja el comportamiento del pronóstico
-# encadenado día a día) y queda como una tabla fija por codigo_producto:
-#   - productos_inactivos: sin ninguna venta en los últimos N días antes del
-#     corte de validación -> se fuerza su predicción a 0.
-#   - tercil_por_producto / factores_por_tercil: para el resto, un factor
-#     real/pronosticado calculado por tercil de volumen histórico, para corregir
-#     el shrinkage hacia la media (sobrestima productos chicos, subestima grandes).
+# --- Calibración por producto (post-modelo, se calcula una vez en train.py a
+# partir de un backtest recursivo y se aplica igual en forecast.py) ---
 
 
 def aplicar_calibracion(pred: np.ndarray, fila: pd.DataFrame, calibracion: dict | None) -> np.ndarray:
