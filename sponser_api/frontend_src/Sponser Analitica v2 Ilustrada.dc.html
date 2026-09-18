@@ -2236,8 +2236,12 @@ class Component extends DCLogic {
       && datos.products.some(p => p.id === skuParam);
 
     this.setState({
-      products: datos.products,
-      clients: datos.clients,
+      // datos.products/clients pueden venir vacíos de verdad (despliegue nuevo,
+      // sin datos cargados todavía) -- se mantiene el mismo placeholder que ya
+      // cubre el primer render, porque renderVals() asume al menos 1 elemento
+      // en varios lugares (pareto[0].share, Math.max(...), etc.).
+      products: datos.products.length ? datos.products : [EMPTY_PRODUCT],
+      clients: datos.clients.length ? datos.clients : [EMPTY_CLIENT],
       lineasComerciales: datos.lineasComerciales,
       modelAccuracy: datos.modelAccuracy,
       clientesInactivos: datos.clientesInactivos,
@@ -2712,6 +2716,7 @@ class Component extends DCLogic {
       mesAnteriorRevFmt: n > 1 ? this.fmtMoney(ytdRev[n - 2]) : '—',
       mesAnteriorDeltaFmt: (() => {
         if (n < 2) return 'primer mes cerrado del año';
+        if (ytdRev[n - 1] === 0) return 'sin facturación registrada en ' + yt.closed[n - 1];
         const d = (ytdRev[n - 2] - ytdRev[n - 1]) / ytdRev[n - 1] * 100;
         return (d >= 0 ? '+' : '') + d.toFixed(1) + '% frente a ' + yt.closed[n - 1];
       })(),
@@ -3891,7 +3896,12 @@ class Component extends DCLogic {
         // "Tendencia de ventas" del detalle de cliente (línea real, sin
         // proyección -- acá no aplica pronóstico, no es demanda comercial).
         const ytP = this.ytd();
-        const pMonths = (S.patrociniosMensual || []).slice(0, ytP.n).map(m => m.monto);
+        // Se rellena a ytP.n con ceros (no un simple slice) para que siempre
+        // tenga un valor por mes cerrado: si patrociniosMensual viene corto o
+        // vacío (sin patrocinios todavía), patTrendBars igual queda del mismo
+        // largo que ytP.closed más abajo, que se arma aparte por calendario.
+        const pMonthsRaw = (S.patrociniosMensual || []).slice(0, ytP.n).map(m => m.monto);
+        const pMonths = ytP.closed.map((_, i) => pMonthsRaw[i] || 0);
         const pW = 620, pH = 190, pTop = 16;
         const pPlot = pH - pTop;
         const pMax = Math.max(1, ...pMonths) * 1.12;

@@ -4,14 +4,34 @@ respuesta que el frontend pide al cargar la sesión."""
 
 from __future__ import annotations
 
+import os
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import models_db, schemas, security
+from .. import config, models_db, schemas, security
 from ..db import get_db
 from ..services import data_access
 
 router = APIRouter(prefix="/api", tags=["bootstrap"])
+
+
+def _bootstrap_vacio() -> schemas.BootstrapOut:
+    """Respuesta válida cuando el pipeline todavía no corrió ni una vez --
+    sin esto, un despliegue nuevo sin datos no puede ni terminar de iniciar
+    sesión (el frontend pide /api/bootstrap como parte del login)."""
+    return schemas.BootstrapOut(
+        asOfDate=date.today(),
+        products=[],
+        clients=[],
+        lineasComerciales=[],
+        modelAccuracy=schemas.ModeloAccuracyOut(version="", accuracyPct=0.0, topSkus=[]),
+        clientesInactivos=[],
+        patrocinioClientes=[],
+        patrociniosMensual=[],
+        availableYears=[],
+    )
 
 
 def _sponsorship_por_sku(db: Session, as_of) -> dict[str, int]:
@@ -30,6 +50,9 @@ def _sponsorship_por_sku(db: Session, as_of) -> dict[str, int]:
 
 @router.get("/bootstrap", response_model=schemas.BootstrapOut)
 def bootstrap(_usuario=Depends(security.usuario_actual), db: Session = Depends(get_db)):
+    if not os.path.exists(config.VENTAS_DIARIAS_PATH):
+        return _bootstrap_vacio()
+
     as_of = data_access.get_as_of_date()
     sponsorship = _sponsorship_por_sku(db, as_of)
     # build_products() ahora cachea y comparte la misma lista entre requests

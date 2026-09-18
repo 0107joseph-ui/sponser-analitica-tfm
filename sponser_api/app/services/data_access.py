@@ -93,7 +93,11 @@ def _clientes_rfm() -> pd.DataFrame:
 
 def get_as_of_date() -> date:
     """Última fecha con venta real registrada -- se trata como el 'hoy' del
-    dashboard en vez de la fecha real del sistema (ver plan, sección de contexto)."""
+    dashboard en vez de la fecha real del sistema (ver plan, sección de contexto).
+    Si el pipeline todavía no corrió (despliegue nuevo, sin datos), no hay
+    ninguna fecha real de la cual partir: se usa la fecha real del sistema."""
+    if not os.path.exists(config.VENTAS_DIARIAS_PATH):
+        return date.today()
     return _ventas_diarias()["fecha"].max().date()
 
 
