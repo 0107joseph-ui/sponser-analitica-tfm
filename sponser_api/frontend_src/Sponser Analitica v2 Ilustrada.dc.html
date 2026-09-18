@@ -570,34 +570,65 @@
           </div>
         </sc-if>
         <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ true }}">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-4)">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-4);margin-bottom:var(--space-4)">
           <div class="card elev-sm" style="border:1px dashed var(--color-divider);align-items:flex-start">
-            <span class="card-kicker">Datos de ventas</span>
-            <span class="card-title">Reportes COM / Control Sponser (.xls)</span>
-            <p class="card-body">Subí acá el archivo exportado del sistema de ventas. Se guarda junto a los años anteriores (no se borra ninguno); si volvés a subir el mismo año, lo reemplaza.</p>
+            <span class="card-kicker">Datos de ventas · COM</span>
+            <span class="card-title">Reporte COM Sponser (.xls)</span>
+            <p class="card-body">Subí acá "COM Sponser AAAA.xls" (o el export real "Ventas COM…AAAA.xls"). Se guarda junto a los años anteriores (no se borra ninguno); si volvés a subir el mismo año, lo reemplaza.</p>
             <label class="btn btn-secondary" style="cursor:pointer;position:relative;overflow:hidden">
               Elegir archivo(s)
-              <input type="file" accept=".xls" multiple onChange="{{ subirVentas }}" disabled="{{ salesUploadingFiles }}" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+              <input type="file" accept=".xls" multiple onChange="{{ subirCom }}" disabled="{{ comUploadingFiles }}" style="position:absolute;inset:0;opacity:0;cursor:pointer">
             </label>
-            <sc-if value="{{ salesUploadingFiles }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ comUploadingFiles }}" hint-placeholder-val="{{ false }}">
               <span class="text-muted" style="font-size:12px;display:block;margin-top:6px">Subiendo…</span>
             </sc-if>
-            <sc-if value="{{ hasSalesUploadFilesMsg }}" hint-placeholder-val="{{ false }}">
-              <span class="card-body" style="margin-top:6px;display:block">{{ salesUploadFilesMsg }}</span>
+            <sc-if value="{{ hasComUploadFilesMsg }}" hint-placeholder-val="{{ false }}">
+              <span class="card-body" style="margin-top:6px;display:block">{{ comUploadFilesMsg }}</span>
             </sc-if>
-            <sc-if value="{{ salesUploadIdle }}" hint-placeholder-val="{{ true }}">
-              <button type="button" class="btn btn-secondary" onClick="{{ startSalesUpload }}" style="margin-top:6px">Actualizar desde archivos</button>
+            <sc-if value="{{ comUploadIdle }}" hint-placeholder-val="{{ true }}">
+              <button type="button" class="btn btn-secondary" onClick="{{ startComUpload }}" style="margin-top:6px">Actualizar desde archivos</button>
             </sc-if>
-            <sc-if value="{{ salesUploadBusy }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ comUploadBusy }}" hint-placeholder-val="{{ false }}">
               <div style="width:100%">
                 <div style="height:4px;background:var(--color-neutral-200)"><div style="height:4px;background:var(--color-accent);animation:upbar 1.1s ease-out forwards"></div></div>
                 <span class="card-body" style="margin-top:6px">Procesando archivo…</span>
               </div>
             </sc-if>
-            <sc-if value="{{ salesUploadDone }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ comUploadDone }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;align-items:center;gap:8px">
                 <span class="tag tag-accent">Procesado</span>
-                <span class="card-body" style="margin:0">{{ salesFileSummary }}</span>
+                <span class="card-body" style="margin:0">{{ comFileSummary }}</span>
+              </div>
+            </sc-if>
+          </div>
+
+          <div class="card elev-sm" style="border:1px dashed var(--color-divider);align-items:flex-start">
+            <span class="card-kicker">Datos de ventas · Control</span>
+            <span class="card-title">Reporte Control Sponser (.xls)</span>
+            <p class="card-body">Subí acá "Control Sponser AAAA.xls" (o el export real "Ventas CON…AAAA.xls"). Se guarda junto a los años anteriores (no se borra ninguno); si volvés a subir el mismo año, lo reemplaza.</p>
+            <label class="btn btn-secondary" style="cursor:pointer;position:relative;overflow:hidden">
+              Elegir archivo(s)
+              <input type="file" accept=".xls" multiple onChange="{{ subirControl }}" disabled="{{ controlUploadingFiles }}" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+            </label>
+            <sc-if value="{{ controlUploadingFiles }}" hint-placeholder-val="{{ false }}">
+              <span class="text-muted" style="font-size:12px;display:block;margin-top:6px">Subiendo…</span>
+            </sc-if>
+            <sc-if value="{{ hasControlUploadFilesMsg }}" hint-placeholder-val="{{ false }}">
+              <span class="card-body" style="margin-top:6px;display:block">{{ controlUploadFilesMsg }}</span>
+            </sc-if>
+            <sc-if value="{{ controlUploadIdle }}" hint-placeholder-val="{{ true }}">
+              <button type="button" class="btn btn-secondary" onClick="{{ startControlUpload }}" style="margin-top:6px">Actualizar desde archivos</button>
+            </sc-if>
+            <sc-if value="{{ controlUploadBusy }}" hint-placeholder-val="{{ false }}">
+              <div style="width:100%">
+                <div style="height:4px;background:var(--color-neutral-200)"><div style="height:4px;background:var(--color-accent);animation:upbar 1.1s ease-out forwards"></div></div>
+                <span class="card-body" style="margin-top:6px">Procesando archivo…</span>
+              </div>
+            </sc-if>
+            <sc-if value="{{ controlUploadDone }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="tag tag-accent">Procesado</span>
+                <span class="card-body" style="margin:0">{{ controlFileSummary }}</span>
               </div>
             </sc-if>
           </div>
@@ -2143,11 +2174,14 @@ class Component extends DCLogic {
     goalSaveError: '',
     selectedClientId: '',
     adjustments: {},
-    salesUpload: 'idle',
+    comUpload: 'idle',
+    controlUpload: 'idle',
     invUpload: 'idle',
     uploadLog: [],
-    salesUploadingFiles: false,
-    salesUploadFilesMsg: '',
+    comUploadingFiles: false,
+    comUploadFilesMsg: '',
+    controlUploadingFiles: false,
+    controlUploadFilesMsg: '',
     invUploadingFiles: false,
     invUploadFilesMsg: '',
     model: 'idle',
@@ -2358,8 +2392,8 @@ class Component extends DCLogic {
   async subirArchivos(e, cual) {
     const files = e.target.files;
     if (!files || !files.length) return;
-    const busyKey = cual === 'ventas' ? 'salesUploadingFiles' : 'invUploadingFiles';
-    const msgKey = cual === 'ventas' ? 'salesUploadFilesMsg' : 'invUploadFilesMsg';
+    const busyKey = cual === 'com' ? 'comUploadingFiles' : cual === 'control' ? 'controlUploadingFiles' : 'invUploadingFiles';
+    const msgKey = cual === 'com' ? 'comUploadFilesMsg' : cual === 'control' ? 'controlUploadFilesMsg' : 'invUploadFilesMsg';
     this.setState({ [busyKey]: true, [msgKey]: '' });
 
     const form = new FormData();
@@ -2384,12 +2418,12 @@ class Component extends DCLogic {
   }
 
   async ejecutarActualizacion() {
-    if (this.state.salesUpload === 'busy') return; // ya hay una corrida en curso
-    this.setState({ salesUpload: 'busy', invUpload: 'busy', model: 'busy' });
+    if (this.state.comUpload === 'busy') return; // ya hay una corrida en curso
+    this.setState({ comUpload: 'busy', controlUpload: 'busy', invUpload: 'busy', model: 'busy' });
     try {
       await this.api('/api/datos/ejecutar-pipeline', { method: 'POST' });
     } catch (_) {
-      this.setState({ salesUpload: 'idle', invUpload: 'idle', model: 'idle' });
+      this.setState({ comUpload: 'idle', controlUpload: 'idle', invUpload: 'idle', model: 'idle' });
       return;
     }
     this.pollEstadoPipeline();
@@ -2402,7 +2436,7 @@ class Component extends DCLogic {
       return;
     }
     const bitacora = await this.api('/api/datos/bitacora').catch(() => this.state.uploadLog);
-    this.setState({ uploadLog: bitacora, salesUpload: 'done', invUpload: 'done', model: 'done' });
+    this.setState({ uploadLog: bitacora, comUpload: 'done', controlUpload: 'done', invUpload: 'done', model: 'done' });
     await this.cargarBootstrap(); // refresca products/clients/forecast con lo que haya cambiado
   }
 
@@ -2823,7 +2857,8 @@ class Component extends DCLogic {
       })),
       logSalesStatus: sUltima.label, logSalesTagClass: sUltima.tagClass, logSalesDetail: sUltima.detail,
       logSalesDateFmt: ultima ? fmtDate(ultima.iniciado_en) + ' · ' + fmtTime(ultima.iniciado_en) : '—',
-      salesFileSummary: sUltima.detail,
+      comFileSummary: sUltima.detail,
+      controlFileSummary: sUltima.detail,
       invFileSummary: sUltima.detail,
     };
   }
@@ -3619,15 +3654,21 @@ class Component extends DCLogic {
       // Dashboard, Proyección, Pedido, Patrocinios o Carga de datos.
       ...((S.tab === 'comercial' || S.tab === 'cliente') ? this.commercialVals(forecastsById) : {}),
 
-      salesUploadIdle: S.salesUpload === 'idle', salesUploadBusy: S.salesUpload === 'busy', salesUploadDone: S.salesUpload === 'done',
+      comUploadIdle: S.comUpload === 'idle', comUploadBusy: S.comUpload === 'busy', comUploadDone: S.comUpload === 'done',
+      controlUploadIdle: S.controlUpload === 'idle', controlUploadBusy: S.controlUpload === 'busy', controlUploadDone: S.controlUpload === 'done',
       invUploadIdle: S.invUpload === 'idle', invUploadBusy: S.invUpload === 'busy', invUploadDone: S.invUpload === 'done',
-      startSalesUpload: () => this.ejecutarActualizacion(),
+      startComUpload: () => this.ejecutarActualizacion(),
+      startControlUpload: () => this.ejecutarActualizacion(),
       startInvUpload: () => this.ejecutarActualizacion(),
-      subirVentas: (e) => this.subirArchivos(e, 'ventas'),
+      subirCom: (e) => this.subirArchivos(e, 'com'),
+      subirControl: (e) => this.subirArchivos(e, 'control'),
       subirInventario: (e) => this.subirArchivos(e, 'inventario'),
-      salesUploadingFiles: S.salesUploadingFiles,
-      hasSalesUploadFilesMsg: !!S.salesUploadFilesMsg,
-      salesUploadFilesMsg: S.salesUploadFilesMsg,
+      comUploadingFiles: S.comUploadingFiles,
+      hasComUploadFilesMsg: !!S.comUploadFilesMsg,
+      comUploadFilesMsg: S.comUploadFilesMsg,
+      controlUploadingFiles: S.controlUploadingFiles,
+      hasControlUploadFilesMsg: !!S.controlUploadFilesMsg,
+      controlUploadFilesMsg: S.controlUploadFilesMsg,
       invUploadingFiles: S.invUploadingFiles,
       hasInvUploadFilesMsg: !!S.invUploadFilesMsg,
       invUploadFilesMsg: S.invUploadFilesMsg,
