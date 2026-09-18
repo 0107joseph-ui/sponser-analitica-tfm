@@ -3,6 +3,8 @@ y registro de routers. Arrancar con `uvicorn app.main:app`."""
 
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -31,6 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+os.makedirs(config.IMAGES_DIR, exist_ok=True)  # puede no existir aún en un despliegue sin datos cargados
 app.mount("/static/product_images", StaticFiles(directory=config.IMAGES_DIR), name="product_images")
 
 app.include_router(auth.router)
@@ -46,8 +49,8 @@ def on_startup() -> None:
     if config.SESSION_SECRET_KEY == config.SESSION_SECRET_KEY_DEFAULT:
         print(
             "[ADVERTENCIA] SPONSER_API_SECRET_KEY no está seteada -- usando la "
-            "clave de desarrollo del código fuente. Las sesiones, códigos OTP y "
-            "enlaces de restablecimiento quedan firmados con una clave pública. "
+            "clave de desarrollo del código fuente. Las sesiones y los enlaces "
+            "de restablecimiento quedan firmados con una clave pública. "
             "Fijar esa variable de entorno antes de exponer este backend fuera de localhost.",
             flush=True,
         )
